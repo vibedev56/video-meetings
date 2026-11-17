@@ -23,13 +23,80 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Backend API for video-meetings: [NestJS](https://github.com/nestjs/nest) with [Prisma](https://www.prisma.io) on PostgreSQL. It provides user registration and login, both returning a JWT.
 
 ## Project setup
 
+Start PostgreSQL from the repo root (see the root README for port settings):
+
 ```bash
-$ pnpm install
+$ docker compose up -d postgres
 ```
+
+Create the local env file and fill it in:
+
+```bash
+$ cp .env.example .env
+```
+
+- `DATABASE_URL` - point it at the published port. If port 5432 is taken, use the `POSTGRES_PORT` you set (for example 5433).
+- `JWT_SECRET` - a long random string. The app will not start without it.
+
+Then install, apply migrations, and run:
+
+```bash
+$ pnpm install              # also runs `prisma generate`
+$ pnpm db:deploy            # apply existing migrations
+$ pnpm dev:api              # from the repo root; or `pnpm start:dev` here
+```
+
+## Endpoints
+
+- `POST /auth/register` - body `{ "email", "password" }` (password at least 8 characters). Creates the user and returns `{ "accessToken" }` with status 201. Returns 409 if the e-mail is taken.
+- `POST /auth/login` - body `{ "email", "password" }`. Looks up the existing user and returns `{ "accessToken" }`. Returns 401 for a wrong password or unknown e-mail.
+
+Meeting endpoints need `Authorization: Bearer <accessToken>`; without a valid token they return 401.
+
+- `POST /meetings` - body `{ "title", "date", "participants" }`, where `date` is an ISO 8601 date-time and `participants` is an array of e-mails. Creates a meeting owned by the current user and returns it with status 201.
+- `GET /meetings` - returns the current user's meetings, ordered by date.
+- `GET /meetings/:id` - returns one meeting. Returns 404 if it does not exist or belongs to another user.
+
+## CQRS
+
+The API uses [`@nestjs/cqrs`](https://docs.nestjs.com/recipes/cqrs). Every operation is either a command (changes state) or a query (reads state), and the controller sends it to the matching bus.
+
+- **Command**: changes state and may return a result. Written as a `*.command.ts` class, handled by a `*.handler.ts` class with `@CommandHandler(...)`, and sent with `CommandBus.execute()`. Example: `CreateMeetingCommand`.
+- **Query**: reads state and never changes it. Written as a `*.query.ts` class, handled by a `*.handler.ts` class with `@QueryHandler(...)`, and sent with `QueryBus.execute()`. Example: `GetMeetingQuery`.
+
+Each feature has the same layout:
+
+```text
+src/meetings/
+  commands/   create-meeting.command.ts, create-meeting.handler.ts
+  queries/    list-meetings.query.ts, list-meetings.handler.ts, get-meeting.query.ts, get-meeting.handler.ts
+  dto/        create-meeting.dto.ts          (validated input from HTTP)
+  meeting.result.ts                          (result type and mapper for the response)
+  meetings.controller.ts                     (HTTP routes, bus calls only)
+  meetings.module.ts                         (imports CqrsModule, registers handlers)
+```
+
+Rules:
+
+1. **Controllers call buses, not services.** The controller validates input through a DTO, turns it into a command or query, and returns what the bus returns. It contains no business logic.
+2. **Commands and queries are plain data classes.** They have `readonly` constructor parameters and no methods. Put the logic in the handler.
+3. **Register every handler in its module's `providers`.** The module must import `CqrsModule`. If a handler is missing, dispatching throws `No handler found for the command: "<name>"` (or `...for the query`).
+4. **Pass the acting user in the command or query.** Handlers scope data by it, for example `where: { ownerId }`, so a user can't read or change another user's data.
+5. **Throw Nest HTTP exceptions from handlers.** `NotFoundException`, `ConflictException`, and `UnauthorizedException` map directly to responses.
+6. **Return result types, not database models.** Map Prisma rows with a mapper such as `toMeetingResult()` so that persistence types don't leak into responses.
+7. **Queries must not write.** If a read needs a side effect, make it a command.
+
+Handlers are plain classes, so they can be unit-tested by constructing them with a fake dependency (for example `new GetMeetingHandler(fakePrisma)`). The e2e tests in `test/` go through HTTP and the real database.
+
+Current handlers use two dependency styles: `RegisterUserHandler` and `LoginUserHandler` call `UsersService`, while the meeting handlers call `PrismaService` directly. Use one style per feature. Prefer a feature service when the same data access appears in several handlers.
+
+## Database changes
+
+Edit `prisma/schema.prisma`, then run `pnpm db:migrate` to create and apply a migration. Commit the new folder under `prisma/migrations/`.
 
 ## Compile and run the project
 
@@ -45,6 +112,8 @@ $ pnpm run start:prod
 ```
 
 ## Run tests
+
+Tests use the real database, so it must be running and migrated first.
 
 ```bash
 # unit tests

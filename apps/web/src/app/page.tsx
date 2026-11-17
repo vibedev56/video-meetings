@@ -1,3 +1,4 @@
+import { Button } from '@heroui/react';
 import Image from 'next/image';
 
 export default function Home() {
@@ -62,6 +63,7 @@ export default function Home() {
           >
             Documentation
           </a>
+          <Button variant="secondary">HeroUI works</Button>
         </div>
       </main>
     </div>

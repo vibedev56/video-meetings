@@ -6,10 +6,10 @@ Guidance for Claude Code when working in this repository.
 
 `video-meetings` is a pnpm monorepo with two apps:
 
-| Path       | Stack   | Purpose     |
-| ---------- | ------- | ----------- |
-| `apps/web` | Next.js | Web client  |
-| `apps/api` | NestJS  | Backend API |
+| Path       | Stack            | Purpose                           |
+| ---------- | ---------------- | --------------------------------- |
+| `apps/web` | Next.js + HeroUI | Web client                        |
+| `apps/api` | NestJS           | Backend API (Prisma + PostgreSQL) |
 
 App-specific guidance lives in `apps/web/CLAUDE.md` and `apps/api/CLAUDE.md`. Read the one for the app you are changing before editing it.
 
@@ -24,6 +24,8 @@ Run from the repo root:
 - `pnpm lint` - lint every app
 - `pnpm test` - run tests in every app that has them
 - `pnpm format` / `pnpm format:check` - Prettier write / check
+- `docker compose up -d postgres` - start PostgreSQL 17 from `docker-compose.yml` (defaults: user/password `postgres`, db `video_meetings`, port `5432`; override via `POSTGRES_*` env vars)
+- `pnpm --filter api db:migrate` - create and apply a Prisma migration in development (`db:deploy` applies existing migrations only)
 
 Use `pnpm --filter <app> <script>` to target a single app (`web` or `api`).
 
