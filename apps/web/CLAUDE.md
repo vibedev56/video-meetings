@@ -28,6 +28,7 @@ Run from `apps/web` or from the repo root with `pnpm --filter web <script>`:
   2. Check the change visually at mobile and desktop widths, in light and dark mode, and confirm the interaction works (for example, form validation and error states).
   3. Review the result against the `ui-ux-pro-max` skill guidelines (accessibility, contrast, touch targets, spacing, typography, and interaction states), and fix any issues it finds.
   4. Report what was checked in the final message. A UI task is not complete until this check is done.
+  5. Save every screenshot taken during visual verification in the repo-root `screenshots/` folder, not in the repo root or `.playwright-mcp/`. When calling `mcp__playwright__browser_take_screenshot`, pass a `filename` that starts with `screenshots/` (for example, `screenshots/register-mobile-dark.png`). Create the folder if it does not exist.
 - `next-env.d.ts` is generated and git-ignored. Do not edit it.
 - Current state: `layout.tsx` has the app metadata (title "Видеовстречи"). `page.tsx` is still the default template. The registration screen is at `/register`.
 
