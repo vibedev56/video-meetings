@@ -50,6 +50,14 @@ $ pnpm db:deploy            # apply existing migrations
 $ pnpm dev:api              # from the repo root; or `pnpm start:dev` here
 ```
 
+## Modules
+
+- `AppModule` (`src/app.module.ts`) - root module. Registers the global `ValidationPipe` and imports the feature modules below.
+- `PrismaModule` (`src/prisma/`) - global `PrismaService`, the shared database client.
+- `UsersModule` (`src/users/`) - stores and looks up users. Handled by CQRS commands and queries. Knows nothing about passwords or tokens.
+- `AuthModule` (`src/auth/`) - registration, login, token signing (`AuthTokenService`), and `JwtAuthGuard`. Gets user data from `UsersModule` through the buses, not by importing it.
+- `MeetingsModule` (`src/meetings/`) - meetings, built on CQRS. Uses `AuthModule` for `JwtAuthGuard`.
+
 ## Endpoints
 
 - `POST /auth/register` - body `{ "email", "password" }` (password at least 8 characters). Creates the user and returns `{ "accessToken" }` with status 201. Returns 409 if the e-mail is taken.
@@ -92,7 +100,16 @@ Rules:
 
 Handlers are plain classes, so they can be unit-tested by constructing them with a fake dependency (for example `new GetMeetingHandler(fakePrisma)`). The e2e tests in `test/` go through HTTP and the real database.
 
-Current handlers use two dependency styles: `RegisterUserHandler` and `LoginUserHandler` call `UsersService`, while the meeting handlers call `PrismaService` directly. Use one style per feature. Prefer a feature service when the same data access appears in several handlers.
+Handlers use `PrismaService` directly, which is the same in every module.
+
+### Modules talk through the buses
+
+The `auth` and `users` modules do not import each other. `AuthModule` only imports `CqrsModule`, and it reaches user data by sending commands and queries to `UsersModule`:
+
+- `RegisterUserHandler` hashes the password, then sends `CreateUserCommand` (`users/commands/`).
+- `LoginUserHandler` sends `FindUserByEmailQuery` (`users/queries/`) and checks the password.
+
+Both modules register their handlers, and `CqrsModule` puts them all on one bus. So a module that sends a command or query needs no import of the module that handles it. Cross-module messages return types from `users/user.result.ts`, and the auth module decides what to do with them.
 
 ## Database changes
 
@@ -111,20 +128,46 @@ $ pnpm run start:dev
 $ pnpm run start:prod
 ```
 
-## Run tests
+## Tests
 
-Tests use the real database, so it must be running and migrated first.
+The suite uses [Vitest](https://vitest.dev) with globals enabled (`describe`, `it`, `expect`). Mocks use `vi.fn()`.
+
+There are two kinds of tests:
+
+- **Unit tests** are `src/**/*.spec.ts`, next to the code they check. Config: `vitest.config.ts`. There are no unit tests yet, so `pnpm test` passes with zero files (`passWithNoTests` in `vitest.config.ts`). They don't need a database.
+- **End-to-end tests** are `test/**/*.e2e-spec.ts`. They boot the full `AppModule`, send real HTTP requests with `supertest`, and use the real PostgreSQL database. Config: `vitest.config.e2e.ts`.
+
+| File                             | What it covers                                                                                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `test/auth.e2e-spec.ts`          | Registration (201, 409 on duplicate e-mail, 400 on invalid input) and login (200, 401 for a wrong password or unknown e-mail, 400 on invalid input). Checks that login doesn't create users and that the token has a valid JWT shape. |
+| `test/meeting.e2e-spec.ts`       | Creating, listing, and getting meetings. Checks 401 without a token, 400 on invalid input, 404 for missing meetings, and that users can't see each other's meetings. |
+
+Each e2e test creates its own users with random e-mails, so tests don't depend on each other's data. The auth tests check the token's shape (three base64url parts, `sub` claim) but don't verify the signature. The signing secret is loaded from `.env` by `ConfigModule`, so a signature check is possible if a test needs one.
+
+Before running the e2e tests:
+
+1. Start PostgreSQL (see "Project setup").
+2. Apply migrations with `pnpm db:deploy`.
+3. Make sure `apps/api/.env` has `DATABASE_URL` and `JWT_SECRET`. The app won't start without them.
 
 ```bash
 # unit tests
 $ pnpm run test
 
-# e2e tests
+# unit tests in watch mode
+$ pnpm run test:watch
+
+# e2e tests (needs the database)
 $ pnpm run test:e2e
 
-# test coverage
+# run one e2e file (the argument is a filter on the file path)
+$ pnpm exec vitest run --config ./vitest.config.e2e.ts auth
+
+# coverage for unit tests
 $ pnpm run test:cov
 ```
+
+Run `pnpm lint` and `pnpm test` after a change, and `pnpm test:e2e` when the change touches HTTP behaviour or the database.
 
 ## Deployment
 

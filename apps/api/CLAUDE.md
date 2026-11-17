@@ -4,18 +4,22 @@
 
 ## API app (`apps/api`)
 
-NestJS backend, ESM (`"type": "module"`). Entry point is `src/main.ts`, which listens on `PORT` (default `3000`). The root module is `src/app.module.ts`.
+NestJS backend, ESM (`"type": "module"`). Entry point is `src/main.ts`, which listens on `PORT` (default `3000`). The root module is `src/app.module.ts`. It registers the global `ValidationPipe` and imports the feature modules below.
 
 Stack: NestJS 12, Prisma 7 ORM on PostgreSQL 17 (via `@prisma/adapter-pg`), `@nestjs/cqrs` for commands and queries, `@nestjs/jwt` for tokens, `bcryptjs` for password hashes, `class-validator` for input validation, `@nestjs/config` for env.
 
 Modules:
 
 - `src/prisma/` - `PrismaModule` (global) and `PrismaService`, the shared client.
-- `src/users/` - `UsersService`: lookup by e-mail and creation of users.
-- `src/auth/` - `AuthModule`, built on CQRS:
-  - `commands/` - `RegisterUserCommand` and its handler (writes a user, returns `{ accessToken }`).
-  - `queries/` - `LoginUserQuery` and its handler (reads a user and checks the password, returns `{ accessToken }`).
+- `src/users/` - `UsersModule`, built on CQRS. Owns user data and does not know about tokens or passwords:
+  - `commands/` - `CreateUserCommand` and its handler (stores a user, returns `UserResult`, 409 on duplicate e-mail).
+  - `queries/` - `FindUserByEmailQuery` and its handler (returns `UserCredentialsResult` or `null`).
+  - `user.result.ts` - `UserResult` and `UserCredentialsResult` (the latter includes `passwordHash` and is only for the auth module).
+- `src/auth/` - `AuthModule`, built on CQRS. Owns tokens and passwords. It imports only `CqrsModule` and `JwtModule`, not `UsersModule`; it talks to users via buses:
+  - `commands/` - `RegisterUserCommand` and its handler (hashes the password, sends `CreateUserCommand`, returns `{ accessToken }`).
+  - `queries/` - `LoginUserQuery` and its handler (sends `FindUserByEmailQuery`, checks the password, returns `{ accessToken }`).
   - `auth.controller.ts` - dispatches to `CommandBus` and `QueryBus` only, with no logic of its own.
+  - `auth-token.service.ts` - `AuthTokenService.issue()` signs access tokens.
   - `password.ts` - bcrypt helpers shared by the handlers.
   - Endpoints: `POST /auth/register` (201; duplicate e-mail gives 409) and `POST /auth/login` (200; wrong password and unknown e-mail both give 401).
   - `jwt-auth.guard.ts` - `JwtAuthGuard` checks the `Bearer` token and sets `request.user`; `current-user.decorator.ts` - `@CurrentUser()` reads it. `AuthModule` exports both.
@@ -50,6 +54,12 @@ Run from `apps/api` or from the repo root with `pnpm --filter api <script>`:
 - `pnpm test` - unit tests (Vitest, `**/*.spec.ts`)
 - `pnpm test:watch` / `pnpm test:cov` - watch mode / coverage
 - `pnpm test:e2e` - end-to-end tests (`test/**/*.e2e-spec.ts`, config `vitest.config.e2e.ts`). Needs a reachable database with migrations applied, because the auth tests hit the real DB.
+
+Test suites (details in `README.md` under "Tests"):
+
+- Unit: none yet (`passWithNoTests` is set in `vitest.config.ts`). No database needed.
+- E2E: `test/auth.e2e-spec.ts` (register and login), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state.
+- The auth e2e tests check only the token's shape, not its signature. `JWT_SECRET` is loaded from `.env` by `ConfigModule`, so a test could verify the signature if it needs to.
 - `pnpm lint` - `oxlint --type-aware src/ test/`
 - `pnpm format` - Prettier over `src/` and `test/`
 - `pnpm db:generate` - `prisma generate` (also runs on `postinstall`)

@@ -1,8 +1,9 @@
-import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../../users/users.service.js';
-import { hashPassword } from '../password.js';
+import { CommandBus, CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { CreateUserCommand } from '../../users/commands/create-user.command.js';
+import type { UserResult } from '../../users/user.result.js';
+import { AuthTokenService } from '../auth-token.service.js';
 import { AuthTokenResult } from '../auth-token.result.js';
+import { hashPassword } from '../password.js';
 import { RegisterUserCommand } from './register-user.command.js';
 
 @CommandHandler(RegisterUserCommand)
@@ -11,22 +12,16 @@ export class RegisterUserHandler implements ICommandHandler<
   AuthTokenResult
 > {
   constructor(
-    private readonly users: UsersService,
-    private readonly jwt: JwtService,
+    private readonly commandBus: CommandBus,
+    private readonly tokens: AuthTokenService,
   ) {}
 
   async execute(command: RegisterUserCommand): Promise<AuthTokenResult> {
     const passwordHash = await hashPassword(command.password);
-    const user = await this.users.create(
-      command.email.trim().toLowerCase(),
-      passwordHash,
+    const user = await this.commandBus.execute<CreateUserCommand, UserResult>(
+      new CreateUserCommand(command.email.trim().toLowerCase(), passwordHash),
     );
 
-    const accessToken = await this.jwt.signAsync({
-      sub: user.id,
-      email: user.email,
-    });
-
-    return { accessToken };
+    return this.tokens.issue(user);
   }
 }

@@ -2,8 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 import { JwtModule } from '@nestjs/jwt';
-import { UsersModule } from '../users/users.module.js';
 import { AuthController } from './auth.controller.js';
+import { AuthTokenService } from './auth-token.service.js';
 import { RegisterUserHandler } from './commands/register-user.handler.js';
 import { LoginUserHandler } from './queries/login-user.handler.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
@@ -11,7 +11,6 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 @Module({
   imports: [
     CqrsModule,
-    UsersModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -21,7 +20,12 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
     }),
   ],
   controllers: [AuthController],
-  providers: [RegisterUserHandler, LoginUserHandler, JwtAuthGuard],
+  providers: [
+    RegisterUserHandler,
+    LoginUserHandler,
+    AuthTokenService,
+    JwtAuthGuard,
+  ],
   exports: [JwtModule, JwtAuthGuard],
 })
 export class AuthModule {}

@@ -1,9 +1,10 @@
-import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
-import { JwtService } from '@nestjs/jwt';
+import { QueryBus, QueryHandler, IQueryHandler } from '@nestjs/cqrs';
 import { UnauthorizedException } from '@nestjs/common';
-import { UsersService } from '../../users/users.service.js';
-import { verifyPassword } from '../password.js';
+import { FindUserByEmailQuery } from '../../users/queries/find-user-by-email.query.js';
+import type { UserCredentialsResult } from '../../users/user.result.js';
+import { AuthTokenService } from '../auth-token.service.js';
 import { AuthTokenResult } from '../auth-token.result.js';
+import { verifyPassword } from '../password.js';
 import { LoginUserQuery } from './login-user.query.js';
 
 @QueryHandler(LoginUserQuery)
@@ -12,12 +13,16 @@ export class LoginUserHandler implements IQueryHandler<
   AuthTokenResult
 > {
   constructor(
-    private readonly users: UsersService,
-    private readonly jwt: JwtService,
+    private readonly queryBus: QueryBus,
+    private readonly tokens: AuthTokenService,
   ) {}
 
   async execute(query: LoginUserQuery): Promise<AuthTokenResult> {
-    const user = await this.users.findByEmail(query.email.trim().toLowerCase());
+    const user = await this.queryBus.execute<
+      FindUserByEmailQuery,
+      UserCredentialsResult | null
+    >(new FindUserByEmailQuery(query.email.trim().toLowerCase()));
+
     const passwordMatches = await verifyPassword(
       query.password,
       user?.passwordHash,
@@ -27,11 +32,6 @@ export class LoginUserHandler implements IQueryHandler<
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const accessToken = await this.jwt.signAsync({
-      sub: user.id,
-      email: user.email,
-    });
-
-    return { accessToken };
+    return this.tokens.issue(user);
   }
 }
