@@ -17,7 +17,7 @@ App-specific guidance lives in `apps/web/CLAUDE.md` and `apps/api/CLAUDE.md`. Re
 
 Run from the repo root:
 
-- `pnpm install` - install all workspace dependencies
+- `pnpm install` - install all workspace dependencies (its `prepare` script installs the Husky git hooks)
 - `pnpm dev` - run web and api together
 - `pnpm dev:web` / `pnpm dev:api` - run one app
 - `pnpm build` - build every app
@@ -37,6 +37,8 @@ Use `pnpm --filter <app> <script>` to target a single app (`web` or `api`).
 - Formatting: Prettier with `singleQuote: true` and `trailingComma: "all"`. `.editorconfig` sets LF line endings, 2-space indentation, UTF-8, and a final newline. Run `pnpm format` before finishing a change.
 - `.env*` files are git-ignored (except `.env.example`). Never commit secrets or `.env` contents.
 - Generated output (`dist/`, `.next/`, `*.tsbuildinfo`, `next-env.d.ts`) is git-ignored. Do not edit it by hand.
+- Git hooks use **Husky** (v9, root devDependency). `.husky/pre-commit` runs `pnpm lint && pnpm test && pnpm --filter api test:e2e` on every commit. The hook is installed by the root `prepare` script (`git config core.hooksPath .husky/_`). Do not skip it with `--no-verify`; fix the failure instead.
+- The e2e step needs PostgreSQL running and migrated before every commit. Run `docker compose up -d postgres` and then `pnpm --filter api db:deploy`. If the database is not reachable, the commit fails at the e2e step.
 
 ## Working in this repo
 
