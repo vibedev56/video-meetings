@@ -14,6 +14,10 @@ pnpm monorepo.
 - `pnpm build` / `pnpm lint` / `pnpm test` – run in every app
 - `pnpm format` / `pnpm format:check` – Prettier
 
+## Git hooks (Husky)
+
+Husky runs `pnpm lint && pnpm test` before every commit (`.husky/pre-commit`). The hooks are installed automatically by `pnpm install` (via the root `prepare` script). If a commit is blocked, fix the lint or test failure; do not bypass the hook with `--no-verify`.
+
 ## Database (PostgreSQL)
 
 `docker-compose.yml` runs PostgreSQL 17 with a named volume `postgres-data`.
