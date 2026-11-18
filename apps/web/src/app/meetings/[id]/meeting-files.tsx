@@ -20,6 +20,7 @@ import {
 } from '@/lib/file-download';
 import { formatDateTime, formatFileSize } from '@/lib/format';
 import { getAccessToken, redirectToLoginIfUnauthorized } from '@/lib/session';
+import { MeetingFileUpload } from './meeting-file-upload';
 
 type LoadState =
   | { status: 'loading' }
@@ -79,6 +80,18 @@ export function MeetingFiles({ meetingId }: { meetingId: string }) {
       isCancelled = true;
     };
   }, [router, meetingId, reloadKey]);
+
+  /** Adds an uploaded file to the list. If the list is still loading, it is fetched again instead. */
+  function handleUploaded(file: MeetingFileResponse) {
+    setLoadState((current) =>
+      current.status === 'ready'
+        ? { status: 'ready', files: [...current.files, file] }
+        : current,
+    );
+    if (loadState.status !== 'ready') {
+      setReloadKey((key) => key + 1);
+    }
+  }
 
   async function handleDownload(file: MeetingFileResponse) {
     const token = getAccessToken();
@@ -197,6 +210,8 @@ export function MeetingFiles({ meetingId }: { meetingId: string }) {
       >
         Файлы
       </h2>
+
+      <MeetingFileUpload meetingId={meetingId} onUploaded={handleUploaded} />
 
       {downloadError && (
         <Alert status="danger">
