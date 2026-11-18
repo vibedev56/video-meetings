@@ -9,6 +9,7 @@ import { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import {
   MAX_FILES_PER_MEETING,
+  MAX_FORM_FIELDS,
   MAX_REQUEST_BYTES,
 } from '../src/meeting-files/meeting-file.policy.js';
 
@@ -162,6 +163,48 @@ describe('Meeting files (e2e)', () => {
       const res = await upload(token, meetingId, { ...MP3, name }).expect(201);
 
       expect(res.body.originalName).toBe(name);
+    });
+
+    it('keeps a name that was sent only as filename* (RFC 5987) intact', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+      const name = 'Запись встречи.mp3';
+      const boundary = 'meeting-boundary';
+      const body = Buffer.from(
+        `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="file"; filename*=UTF-8''${encodeURIComponent(name)}\r\n` +
+          'Content-Type: audio/mpeg\r\n\r\n' +
+          'fake media bytes\r\n' +
+          `--${boundary}--\r\n`,
+      );
+
+      const res = await request(server())
+        .post(`/meetings/${meetingId}/files`)
+        .set('Authorization', `Bearer ${token}`)
+        .set('Content-Type', `multipart/form-data; boundary=${boundary}`)
+        .send(body)
+        .expect(201);
+
+      expect(res.body.originalName).toBe(name);
+    });
+
+    it('returns 400 when the form carries too many text fields, and stores nothing', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+      let req = request(server())
+        .post(`/meetings/${meetingId}/files`)
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', Buffer.from('fake media bytes'), {
+          filename: 'standup.mp3',
+          contentType: 'audio/mpeg',
+        });
+      for (let i = 0; i < MAX_FORM_FIELDS + 1; i++) {
+        req = req.field(`note${i}`, 'x');
+      }
+
+      await req.expect(400);
+
+      expect(await filesOnDisk()).toEqual([]);
     });
 
     it('returns 400 for an unsupported extension and stores nothing', async () => {

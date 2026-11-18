@@ -48,9 +48,30 @@ export function canUploadMoreFiles(currentCount: number): boolean {
 }
 
 /**
- * Multipart part names arrive decoded as latin1, so UTF-8 names such as
+ * Plain `filename=` parts arrive decoded as latin1, so UTF-8 names such as
  * Cyrillic ones come out garbled. Re-reading the bytes as UTF-8 restores them.
+ *
+ * Names sent as `filename*` (RFC 5987) are already decoded by the parser, and
+ * re-reading them would corrupt them. A string is re-read only when every
+ * character fits in one byte and the bytes are valid UTF-8. Otherwise it is
+ * returned unchanged.
  */
 export function decodeMultipartFilename(rawName: string): string {
-  return Buffer.from(rawName, 'latin1').toString('utf8');
+  const fitsInOneByte = rawName
+    .split('')
+    .every((ch) => ch.charCodeAt(0) <= 0xff);
+  if (!fitsInOneByte) {
+    return rawName;
+  }
+
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(
+      Buffer.from(rawName, 'latin1'),
+    );
+  } catch {
+    return rawName;
+  }
 }
+
+/** Text fields a meeting-file form may carry besides the file itself. */
+export const MAX_FORM_FIELDS = 10;

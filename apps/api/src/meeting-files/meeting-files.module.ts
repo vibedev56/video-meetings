@@ -14,6 +14,7 @@ import {
   decodeMultipartFilename,
   isAllowedMeetingFileType,
   MAX_FILE_SIZE_BYTES,
+  MAX_FORM_FIELDS,
 } from './meeting-file.policy.js';
 import { getMeetingFilesDir } from './meeting-files.config.js';
 import { MeetingFilesController } from './meeting-files.controller.js';
@@ -39,7 +40,14 @@ import { UploadMeetingFileGuard } from './upload-meeting-file.guard.js';
               `${randomUUID()}${extname(file.originalname).toLowerCase()}`,
             ),
         }),
-        limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
+        // Without field and part limits, a chunked request could carry any number
+        // of text parts. Each text field is also capped at 1 MB (busboy default).
+        limits: {
+          fileSize: MAX_FILE_SIZE_BYTES,
+          files: 1,
+          fields: MAX_FORM_FIELDS,
+          parts: MAX_FORM_FIELDS + 1,
+        },
         // Runs before anything is written, so a rejected type never reaches disk.
         fileFilter: (_req, file, cb) => {
           file.originalname = decodeMultipartFilename(file.originalname);

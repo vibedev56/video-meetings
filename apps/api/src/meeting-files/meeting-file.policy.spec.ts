@@ -100,4 +100,20 @@ describe('decodeMultipartFilename', () => {
   it('leaves an ASCII name unchanged', () => {
     expect(decodeMultipartFilename('standup.mp3')).toBe('standup.mp3');
   });
+
+  it('leaves a name that is already decoded (filename*) unchanged', () => {
+    expect(decodeMultipartFilename('Запись встречи.mp3')).toBe(
+      'Запись встречи.mp3',
+    );
+  });
+
+  it('leaves a Latin-1 name that is not valid UTF-8 unchanged', () => {
+    expect(decodeMultipartFilename('café.mp3')).toBe('café.mp3');
+  });
+
+  it('restores a UTF-8 name with a Latin-1 character', () => {
+    const raw = Buffer.from('café.mp3', 'utf8').toString('latin1');
+
+    expect(decodeMultipartFilename(raw)).toBe('café.mp3');
+  });
 });

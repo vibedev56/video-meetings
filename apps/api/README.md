@@ -73,7 +73,7 @@ Meeting endpoints need `Authorization: Bearer <accessToken>`; without a valid to
 
 Meeting file endpoints also need the Bearer token.
 
-- `POST /meetings/:id/files` - multipart form with one file in the `file` field. Returns the stored file with status 201. Limits: 500 MB per file (413, checked against `Content-Length` before the body is read, and while streaming), extension and MIME type must match a pair in the allow-list: mp3, wav, m4a, ogg, mp4, webm, mov (400), at most 5 files per meeting (409). Returns 404 for another user's meeting. A rejected upload leaves no file on disk.
+- `POST /meetings/:id/files` - multipart form with one file in the `file` field. Returns the stored file with status 201. Limits: 500 MB per file (413, checked against `Content-Length` before the body is read, and while streaming), extension and MIME type must match a pair in the allow-list: mp3, wav, m4a, ogg, mp4, webm, mov (400), at most 5 files per meeting (409). The form may carry at most 10 text fields besides the file (400). Returns 404 for another user's meeting. A rejected upload leaves no file on disk.
 - `GET /meetings/:id/files` - returns the meeting's files in upload order (`id`, `originalName`, `sizeBytes`, `mimeType`, `uploadedAt`). Returns 404 for another user's meeting.
 - `GET /meetings/:id/files/:fileId` - streams the file with its stored bytes. `Content-Disposition` is `attachment` with the original name in `filename*` (RFC 5987, so Cyrillic names work). Returns 404 for another user's meeting, an unknown file, or a file missing from disk.
 - `DELETE /meetings/:id/files/:fileId` - removes the file record and the file on disk. Returns 204. Returns 404 for another user's meeting or an unknown file.
