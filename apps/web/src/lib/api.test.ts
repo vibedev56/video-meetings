@@ -78,6 +78,7 @@ describe('downloadMeetingFile', () => {
       new Response('abc', {
         status: 200,
         headers: {
+          'Content-Length': '3',
           'Content-Disposition':
             'attachment; filename="_.mp3"; filename*=UTF-8\'\'%D0%B7%D0%B0%D0%BF%D0%B8%D1%81%D1%8C.mp3',
         },
@@ -94,7 +95,16 @@ describe('downloadMeetingFile', () => {
       }),
     );
     expect(result.fileName).toBe('запись.mp3');
-    expect(result.blob.size).toBe(3);
+    expect(result.totalBytes).toBe(3);
+    expect(result.body).not.toBeNull();
+  });
+
+  it('reports no size when Content-Length is missing', async () => {
+    fetchMock.mockResolvedValue(new Response('abc', { status: 200 }));
+
+    const result = await downloadMeetingFile(TOKEN, 'm1', 'f1');
+
+    expect(result.totalBytes).toBeNull();
   });
 
   it('rejects with the API status when the server fails', async () => {

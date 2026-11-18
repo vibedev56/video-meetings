@@ -31,8 +31,9 @@ export interface MeetingFileResponse {
 }
 
 export interface DownloadedFile {
-  blob: Blob;
+  body: ReadableStream<Uint8Array>;
   fileName: string | null;
+  totalBytes: number | null;
 }
 
 interface ErrorBody {
@@ -84,6 +85,11 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
   return (await response.json().catch(() => null)) as T;
 }
 
+/** True if `error` is an `ApiError` with exactly this HTTP status. */
+export function hasStatus(error: unknown, status: number): boolean {
+  return error instanceof ApiError && error.status === status;
+}
+
 /** Headers for a request made with the user's access token. */
 function authorization(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
@@ -130,8 +136,9 @@ export function listMeetingFiles(token: string, meetingId: string) {
 }
 
 /**
- * `GET /meetings/:id/files/:fileId`. Resolves with the file contents and the
- * name from `Content-Disposition` (`null` if the header is missing).
+ * `GET /meetings/:id/files/:fileId`. Resolves with the body as a stream (not
+ * read into memory), the name from `Content-Disposition` (`null` if the header
+ * is missing) and the size from `Content-Length` (`null` if unknown).
  */
 export async function downloadMeetingFile(
   token: string,
@@ -147,19 +154,21 @@ export async function downloadMeetingFile(
     throw await toApiError(response);
   }
 
-  let blob: Blob;
-  try {
-    blob = await response.blob();
-  } catch {
-    // The connection dropped while the body was being read.
+  if (!response.body) {
     throw new ApiError(0, NETWORK_ERROR_MESSAGE);
   }
 
+  const contentLength = Number(response.headers.get('Content-Length'));
+
   return {
-    blob,
+    body: response.body,
     fileName: parseContentDispositionFileName(
       response.headers.get('Content-Disposition'),
     ),
+    totalBytes:
+      Number.isFinite(contentLength) && contentLength > 0
+        ? contentLength
+        : null,
   };
 }
 
@@ -197,16 +206,4 @@ export function parseContentDispositionFileName(
 
   const plain = /filename="([^"]*)"/i.exec(header);
   return plain ? plain[1] : null;
-}
-
-/** Saves `blob` through a temporary object URL and a link click. Browser only. */
-export function saveBlob(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }

@@ -8,13 +8,21 @@ import {
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type MeetingFileResponse } from '@/lib/api';
+import type { SaveWritable } from '@/lib/file-download';
 import { MeetingFiles } from './meeting-files';
 
 const apiMock = vi.hoisted(() => ({
   listMeetingFiles: vi.fn(),
   downloadMeetingFile: vi.fn(),
   deleteMeetingFile: vi.fn(),
+}));
+
+const downloadMock = vi.hoisted(() => ({
   saveBlob: vi.fn(),
+  collectToBlob: vi.fn(),
+  pickSaveFile: vi.fn(),
+  supportsFilePicker: vi.fn(),
+  streamToWritable: vi.fn(),
 }));
 
 const routerMock = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -23,6 +31,8 @@ vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>();
   return { ...actual, ...apiMock };
 });
+
+vi.mock('@/lib/file-download', () => downloadMock);
 
 vi.mock('next/navigation', () => ({
   useRouter: () => routerMock,
@@ -42,6 +52,9 @@ const FILE: MeetingFileResponse = {
 beforeEach(() => {
   localStorage.setItem('accessToken', TOKEN);
   Object.values(apiMock).forEach((mock) => mock.mockReset());
+  Object.values(downloadMock).forEach((mock) => mock.mockReset());
+  // Without a file picker the download takes the Blob path.
+  downloadMock.supportsFilePicker.mockReturnValue(false);
   routerMock.replace.mockReset();
 });
 
@@ -95,15 +108,17 @@ describe('MeetingFiles download', () => {
     apiMock.listMeetingFiles.mockResolvedValue([FILE]);
     const blob = new Blob(['abc']);
     apiMock.downloadMeetingFile.mockResolvedValue({
-      blob,
+      body: null,
       fileName: 'запись.mp3',
+      totalBytes: 3,
     });
+    downloadMock.collectToBlob.mockResolvedValue(blob);
 
     render(<MeetingFiles meetingId={MEETING_ID} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Скачать' }));
 
     await waitFor(() =>
-      expect(apiMock.saveBlob).toHaveBeenCalledWith(blob, 'запись.mp3'),
+      expect(downloadMock.saveBlob).toHaveBeenCalledWith(blob, 'запись.mp3'),
     );
     expect(apiMock.downloadMeetingFile).toHaveBeenCalledWith(
       TOKEN,
@@ -124,7 +139,49 @@ describe('MeetingFiles download', () => {
     expect(
       await screen.findByText(/Не удалось скачать файл «запись.mp3»/),
     ).toBeTruthy();
-    expect(apiMock.saveBlob).not.toHaveBeenCalled();
+    expect(downloadMock.saveBlob).not.toHaveBeenCalled();
+  });
+
+  it('streams into the picked file without collecting it in memory', async () => {
+    apiMock.listMeetingFiles.mockResolvedValue([FILE]);
+    const writable = {} as SaveWritable;
+    const body = {} as ReadableStream<Uint8Array>;
+    downloadMock.supportsFilePicker.mockReturnValue(true);
+    downloadMock.pickSaveFile.mockResolvedValue(writable);
+    downloadMock.streamToWritable.mockResolvedValue(undefined);
+    apiMock.downloadMeetingFile.mockResolvedValue({
+      body,
+      fileName: 'запись.mp3',
+      totalBytes: 3,
+    });
+
+    render(<MeetingFiles meetingId={MEETING_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Скачать' }));
+
+    await waitFor(() =>
+      expect(downloadMock.streamToWritable).toHaveBeenCalledWith(
+        body,
+        writable,
+        3,
+        expect.any(Function),
+      ),
+    );
+    expect(downloadMock.pickSaveFile).toHaveBeenCalledWith('запись.mp3');
+    expect(downloadMock.collectToBlob).not.toHaveBeenCalled();
+    expect(downloadMock.saveBlob).not.toHaveBeenCalled();
+  });
+
+  it('does not download when the user cancels the save dialog', async () => {
+    apiMock.listMeetingFiles.mockResolvedValue([FILE]);
+    downloadMock.supportsFilePicker.mockReturnValue(true);
+    downloadMock.pickSaveFile.mockResolvedValue(null);
+
+    render(<MeetingFiles meetingId={MEETING_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Скачать' }));
+
+    await waitFor(() => expect(downloadMock.pickSaveFile).toHaveBeenCalled());
+    expect(apiMock.downloadMeetingFile).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Не удалось скачать/)).toBeNull();
   });
 });
 

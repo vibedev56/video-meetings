@@ -4,11 +4,13 @@ import { Alert, Button, Card, Chip, Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ApiError, listMeetings, type MeetingResponse } from '@/lib/api';
+import { listMeetings, type MeetingResponse } from '@/lib/api';
+import { formatDateTime } from '@/lib/format';
 import {
   clearAccessToken,
   getAccessToken,
   getEmailFromToken,
+  redirectToLoginIfUnauthorized,
 } from '@/lib/session';
 
 const RECENT_MEETINGS_LIMIT = 3;
@@ -21,14 +23,6 @@ type LoadState =
       email: string;
       meetings: MeetingResponse[];
     };
-
-const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
 
 function sortByDateDesc(meetings: MeetingResponse[]) {
   return [...meetings].sort(
@@ -64,9 +58,7 @@ export function HomeDashboard() {
           return;
         }
         // 401 means the token is invalid or expired: force a new login.
-        if (error instanceof ApiError && error.status === 401) {
-          clearAccessToken();
-          router.replace('/auth/login');
+        if (redirectToLoginIfUnauthorized(error, router)) {
           return;
         }
         setState({ status: 'error' });
@@ -211,7 +203,7 @@ function ReadyContent({
                       {meeting.title}
                     </Link>
                     <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                      {dateFormatter.format(new Date(meeting.date))}
+                      {formatDateTime(meeting.date)}
                     </span>
                     <Chip size="sm" variant="soft">
                       Участников: {meeting.participants.length}

@@ -39,4 +39,10 @@ Run from `apps/web` or from the repo root with `pnpm --filter web <script>`:
 - `API_URL` is read on the server when Next starts. Default: `http://localhost:3000`. Set it in `apps/web/.env.local` (git-ignored) if the API runs elsewhere.
 - `src/lib/api.ts` holds the typed request helper (`apiRequest`, `ApiError`) and the API calls (`registerUser`, `getMeeting`, `listMeetingFiles`, `downloadMeetingFile`, `deleteMeetingFile`). Add new endpoints there. A network failure is an `ApiError` with status `0`.
 - `src/lib/format.ts` formats file sizes and dates in Russian. `src/lib/api.test.ts` and `src/lib/format.test.ts` cover the API client and formatting.
+- `src/lib/file-download.ts` saves a download. With `showSaveFilePicker` (Chromium) the body streams straight into the chosen file. Otherwise it is collected into a Blob, which holds the whole file in memory. Call `pickSaveFile` from the click handler before any `await`, because the browser needs a user gesture for the dialog.
+- `src/lib/session.ts` has `redirectToLoginIfUnauthorized`, which clears the token and sends a 401 to `/auth/login`. Use it instead of repeating the check.
 - `src/app/register/` is the registration page: `page.tsx` (server component with metadata) and `register-form.tsx` (client form with HeroUI `Form`, `TextField`, `Alert`, and `Card`). Server errors go to fields via `validationErrors`: 409 maps to the email field, 400 and other errors to an `Alert`. On success the access token is saved to `localStorage` under `accessToken`.
+
+## Test user
+
+The test account's login and password are not stored in this file. They are in `apps/web/.env.local` (git-ignored) as `QA_TEST_EMAIL` and `QA_TEST_PASSWORD`. When you need to log in (for example, for Playwright checks), read those two variables from that file. Do not copy the password into any tracked file.

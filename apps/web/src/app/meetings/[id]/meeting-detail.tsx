@@ -4,9 +4,9 @@ import { Alert, Button, Card, Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ApiError, getMeeting, type MeetingResponse } from '@/lib/api';
+import { getMeeting, hasStatus, type MeetingResponse } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
-import { clearAccessToken, getAccessToken } from '@/lib/session';
+import { getAccessToken, redirectToLoginIfUnauthorized } from '@/lib/session';
 import { MeetingFiles } from './meeting-files';
 
 type LoadState =
@@ -40,15 +40,11 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
         if (isCancelled) {
           return;
         }
-        if (error instanceof ApiError && error.status === 401) {
-          clearAccessToken();
-          router.replace('/auth/login');
+        if (redirectToLoginIfUnauthorized(error, router)) {
           return;
         }
         setState(
-          error instanceof ApiError && error.status === 404
-            ? { status: 'not-found' }
-            : { status: 'error' },
+          hasStatus(error, 404) ? { status: 'not-found' } : { status: 'error' },
         );
       }
     }
@@ -122,18 +118,19 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
         )}
 
         {state.status === 'ready' && (
-          <>
-            <section className="flex flex-col gap-2">
-              <h1 className="break-words text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-                {state.meeting.title}
-              </h1>
-              <p className="text-zinc-600 dark:text-zinc-400">
-                {formatDateTime(state.meeting.date)}
-              </p>
-            </section>
+          <section className="flex flex-col gap-2">
+            <h1 className="break-words text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+              {state.meeting.title}
+            </h1>
+            <p className="text-zinc-600 dark:text-zinc-400">
+              {formatDateTime(state.meeting.date)}
+            </p>
+          </section>
+        )}
 
-            <MeetingFiles meetingId={meetingId} />
-          </>
+        {/* Loads in parallel with the meeting. It stays mounted while the meeting loads and is hidden only if the meeting is missing or failed. */}
+        {(state.status === 'loading' || state.status === 'ready') && (
+          <MeetingFiles meetingId={meetingId} />
         )}
       </main>
     </div>

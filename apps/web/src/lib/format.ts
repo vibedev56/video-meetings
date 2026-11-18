@@ -12,20 +12,36 @@ const dateTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
   minute: '2-digit',
 });
 
-/** Formats a byte count for display, for example `1,5 МБ`. */
+/** Rounds to one decimal place, the precision the size is shown with. */
+function roundToTenth(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * Formats a byte count for display, for example `1,5 МБ`. The unit is chosen
+ * after rounding, so a value that rounds up to 1024 moves to the next unit
+ * (1 048 575 bytes shows as `1 МБ`, not `1 024 КБ`).
+ */
 export function formatFileSize(sizeBytes: number): string {
   let value = sizeBytes;
   let unitIndex = 0;
 
-  while (value >= 1024 && unitIndex < SIZE_UNITS.length - 1) {
+  while (unitIndex < SIZE_UNITS.length - 1 && roundToTenth(value) >= 1024) {
     value /= 1024;
     unitIndex += 1;
   }
 
-  return `${sizeFormatter.format(value)} ${SIZE_UNITS[unitIndex]}`;
+  return `${sizeFormatter.format(roundToTenth(value))} ${SIZE_UNITS[unitIndex]}`;
 }
 
-/** Formats an ISO 8601 date-time string for display in Russian. */
+/**
+ * Formats an ISO 8601 date-time string for display in Russian. An invalid date
+ * gives a placeholder instead of throwing during render.
+ */
 export function formatDateTime(isoDate: string): string {
-  return dateTimeFormatter.format(new Date(isoDate));
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) {
+    return 'Дата неизвестна';
+  }
+  return dateTimeFormatter.format(date);
 }
