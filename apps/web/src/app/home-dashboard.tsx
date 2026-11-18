@@ -1,6 +1,7 @@
 'use client';
 
 import { Alert, Button, Card, Chip, Spinner } from '@heroui/react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ApiError, listMeetings, type MeetingResponse } from '@/lib/api';
@@ -203,9 +204,12 @@ function ReadyContent({
               <li key={meeting.id}>
                 <Card>
                   <Card.Content className="flex flex-col gap-2">
-                    <span className="font-medium text-zinc-950 dark:text-zinc-50">
+                    <Link
+                      href={`/meetings/${meeting.id}`}
+                      className="font-medium text-zinc-950 underline-offset-4 hover:underline dark:text-zinc-50"
+                    >
                       {meeting.title}
-                    </span>
+                    </Link>
                     <span className="text-sm text-zinc-600 dark:text-zinc-400">
                       {dateFormatter.format(new Date(meeting.date))}
                     </span>

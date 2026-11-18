@@ -1,4 +1,4 @@
-/** Error returned by the API, carrying the HTTP status code. */
+/** Error returned by the API, carrying the HTTP status code. Status 0 means the request never reached the server. */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -21,31 +21,72 @@ export interface MeetingResponse {
   participants: string[];
 }
 
+/** File of a meeting as returned by `GET /meetings/:id/files`. `uploadedAt` is an ISO 8601 string in JSON. */
+export interface MeetingFileResponse {
+  id: string;
+  originalName: string;
+  sizeBytes: number;
+  mimeType: string;
+  uploadedAt: string;
+}
+
+export interface DownloadedFile {
+  blob: Blob;
+  fileName: string | null;
+}
+
 interface ErrorBody {
   message?: string | string[];
 }
 
-/** Sends a JSON request to the API through the `/api` rewrite. */
+const NETWORK_ERROR_MESSAGE =
+  'Нет соединения с сервером. Проверьте подключение и попробуйте снова.';
+
+/**
+ * Sends a request to the API through the `/api` rewrite. A network failure
+ * (no response at all) is turned into an `ApiError` with status 0.
+ */
+async function sendRequest(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`/api${path}`, init);
+  } catch {
+    throw new ApiError(0, NETWORK_ERROR_MESSAGE);
+  }
+}
+
+/** Builds an `ApiError` from a failed response, using the API's `message` when present. */
+async function toApiError(response: Response): Promise<ApiError> {
+  const body = (await response.json().catch(() => null)) as ErrorBody | null;
+  const message = body?.message;
+
+  return new ApiError(
+    response.status,
+    Array.isArray(message)
+      ? message.join(', ')
+      : (message ?? response.statusText),
+  );
+}
+
+/** Sends a request and resolves with the parsed JSON body (`null` for empty bodies). */
 async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const response = await sendRequest(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init.headers },
+    headers: {
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+    },
   });
 
-  const body = (await response.json().catch(() => null)) as
-    ErrorBody | T | null;
-
   if (!response.ok) {
-    const message = (body as ErrorBody | null)?.message;
-    throw new ApiError(
-      response.status,
-      Array.isArray(message)
-        ? message.join(', ')
-        : (message ?? response.statusText),
-    );
+    throw await toApiError(response);
   }
 
-  return body as T;
+  return (await response.json().catch(() => null)) as T;
+}
+
+/** Headers for a request made with the user's access token. */
+function authorization(token: string): HeadersInit {
+  return { Authorization: `Bearer ${token}` };
 }
 
 /** `POST /auth/register`. Resolves with the access token of the new user. */
@@ -68,6 +109,104 @@ export function loginUser(email: string, password: string) {
 export function listMeetings(token: string) {
   return apiRequest<MeetingResponse[]>('/meetings', {
     method: 'GET',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authorization(token),
   });
+}
+
+/** `GET /meetings/:id`. Rejects with 404 if the meeting does not exist or belongs to another user. */
+export function getMeeting(token: string, meetingId: string) {
+  return apiRequest<MeetingResponse>(
+    `/meetings/${encodeURIComponent(meetingId)}`,
+    { method: 'GET', headers: authorization(token) },
+  );
+}
+
+/** `GET /meetings/:id/files`. Rejects with 404 if the meeting belongs to another user. */
+export function listMeetingFiles(token: string, meetingId: string) {
+  return apiRequest<MeetingFileResponse[]>(
+    `/meetings/${encodeURIComponent(meetingId)}/files`,
+    { method: 'GET', headers: authorization(token) },
+  );
+}
+
+/**
+ * `GET /meetings/:id/files/:fileId`. Resolves with the file contents and the
+ * name from `Content-Disposition` (`null` if the header is missing).
+ */
+export async function downloadMeetingFile(
+  token: string,
+  meetingId: string,
+  fileId: string,
+): Promise<DownloadedFile> {
+  const response = await sendRequest(
+    `/meetings/${encodeURIComponent(meetingId)}/files/${encodeURIComponent(fileId)}`,
+    { method: 'GET', headers: authorization(token) },
+  );
+
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+
+  let blob: Blob;
+  try {
+    blob = await response.blob();
+  } catch {
+    // The connection dropped while the body was being read.
+    throw new ApiError(0, NETWORK_ERROR_MESSAGE);
+  }
+
+  return {
+    blob,
+    fileName: parseContentDispositionFileName(
+      response.headers.get('Content-Disposition'),
+    ),
+  };
+}
+
+/** `DELETE /meetings/:id/files/:fileId`. Resolves once the server has removed the file. */
+export function deleteMeetingFile(
+  token: string,
+  meetingId: string,
+  fileId: string,
+) {
+  return apiRequest<null>(
+    `/meetings/${encodeURIComponent(meetingId)}/files/${encodeURIComponent(fileId)}`,
+    { method: 'DELETE', headers: authorization(token) },
+  );
+}
+
+/**
+ * Reads the file name from a `Content-Disposition` header. Prefers the
+ * RFC 5987 `filename*` parameter, which carries non-ASCII names.
+ */
+export function parseContentDispositionFileName(
+  header: string | null,
+): string | null {
+  if (!header) {
+    return null;
+  }
+
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim());
+    } catch {
+      // Malformed escape sequence: fall back to the plain parameter.
+    }
+  }
+
+  const plain = /filename="([^"]*)"/i.exec(header);
+  return plain ? plain[1] : null;
+}
+
+/** Saves `blob` through a temporary object URL and a link click. Browser only. */
+export function saveBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

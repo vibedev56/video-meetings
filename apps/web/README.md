@@ -27,6 +27,12 @@ pnpm exec next dev -p 3001
 
 Requests to `/api/*` are forwarded to `API_URL`. Restart `pnpm dev` after changing `API_URL`.
 
+Run the unit and component tests (Vitest + Testing Library) with:
+
+```bash
+pnpm test
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
