@@ -1,9 +1,10 @@
 'use client';
 
-import { Alert, Button, ProgressBar } from '@heroui/react';
+import { Alert, Button, buttonVariants, ProgressBar } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   type ChangeEvent,
@@ -48,7 +49,7 @@ export function MeetingFileUpload({
   onUploaded: (file: MeetingFileResponse) => void;
 }) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
   const abortRef = useRef<AbortController | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>({
     status: 'idle',
@@ -156,6 +157,14 @@ export function MeetingFileUpload({
             : 'border-zinc-300 bg-white/60 dark:border-zinc-700 dark:bg-zinc-900/60'
         }`}
       >
+        <input
+          id={inputId}
+          type="file"
+          accept={ACCEPTED_FILE_EXTENSIONS.join(',')}
+          onChange={handleInputChange}
+          className="peer sr-only"
+          aria-label="Файл встречи"
+        />
         {uploadState.status === 'uploading' ? (
           <div className="flex w-full flex-col gap-3">
             <p className="break-all font-medium text-zinc-950 dark:text-zinc-50">
@@ -204,23 +213,17 @@ export function MeetingFileUpload({
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
               mp3, wav, m4a, ogg, mp4, webm, mov · до 500 МБ · один файл за раз
             </p>
-            <Button
-              variant="primary"
-              className="min-h-11"
-              onPress={() => inputRef.current?.click()}
+            {/* A native label opens the file picker in every browser without
+                scripting, unlike a programmatic input.click() from a press
+                handler. The input stays focusable for the keyboard. */}
+            <label
+              htmlFor={inputId}
+              className={`${buttonVariants({ variant: 'primary' })} min-h-11 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500 peer-focus-visible:ring-offset-2`}
             >
               Выбрать файл
-            </Button>
+            </label>
           </>
         )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept={ACCEPTED_FILE_EXTENSIONS.join(',')}
-          onChange={handleInputChange}
-          hidden
-          aria-label="Файл встречи"
-        />
       </div>
 
       {error && (
