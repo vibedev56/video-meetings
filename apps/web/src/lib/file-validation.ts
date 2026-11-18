@@ -9,6 +9,9 @@
 
 export const MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024;
 
+/** Files one meeting may hold. Mirrors `MAX_FILES_PER_MEETING` in the API policy. */
+export const MAX_FILES_PER_MEETING = 5;
+
 /** Allowed MIME types per extension, the same pairs the API accepts. */
 const ALLOWED_TYPES = new Map<string, readonly string[]>([
   ['.mp3', ['audio/mpeg', 'audio/mp3']],

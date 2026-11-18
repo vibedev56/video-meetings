@@ -211,7 +211,15 @@ export function MeetingFiles({ meetingId }: { meetingId: string }) {
         Файлы
       </h2>
 
-      <MeetingFileUpload meetingId={meetingId} onUploaded={handleUploaded} />
+      {/* Keyed by meeting: switching meetings remounts the form, which aborts any upload still running for the previous one. */}
+      <MeetingFileUpload
+        key={meetingId}
+        meetingId={meetingId}
+        filesCount={
+          loadState.status === 'ready' ? loadState.files.length : null
+        }
+        onUploaded={handleUploaded}
+      />
 
       {downloadError && (
         <Alert status="danger">

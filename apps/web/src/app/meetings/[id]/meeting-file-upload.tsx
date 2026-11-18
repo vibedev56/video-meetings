@@ -12,6 +12,7 @@ import {
 import { uploadMeetingFile, type MeetingFileResponse } from '@/lib/api';
 import {
   ACCEPTED_FILE_EXTENSIONS,
+  MAX_FILES_PER_MEETING,
   validateMeetingFile,
 } from '@/lib/file-validation';
 import { uploadErrorMessage } from '@/lib/upload-errors';
@@ -19,6 +20,8 @@ import { getAccessToken, redirectToLoginIfUnauthorized } from '@/lib/session';
 
 const ONE_FILE_MESSAGE =
   'За один раз загружается один файл. Выберите один файл.';
+
+const FULL_MEETING_MESSAGE = `У встречи уже ${MAX_FILES_PER_MEETING} файлов, это максимум. Удалите ненужный файл, чтобы загрузить новый.`;
 
 type UploadState =
   | { status: 'idle' }
@@ -31,12 +34,17 @@ function isAbortError(error: unknown) {
 /**
  * Upload form for one meeting: pick a file with the dialog or drag it onto the
  * drop zone. One file at a time, checked in the browser before sending.
+ *
+ * `filesCount` is the number of files the meeting already has, or `null` while
+ * the list is still loading. A full meeting gets no upload controls.
  */
 export function MeetingFileUpload({
   meetingId,
+  filesCount,
   onUploaded,
 }: {
   meetingId: string;
+  filesCount: number | null;
   onUploaded: (file: MeetingFileResponse) => void;
 }) {
   const router = useRouter();
@@ -54,11 +62,17 @@ export function MeetingFileUpload({
   }, []);
 
   const isUploading = uploadState.status === 'uploading';
+  const isFull = filesCount !== null && filesCount >= MAX_FILES_PER_MEETING;
 
   async function startUpload(file: File) {
     const token = getAccessToken();
     if (!token) {
       router.replace('/auth/login');
+      return;
+    }
+
+    if (isFull) {
+      setError(FULL_MEETING_MESSAGE);
       return;
     }
 
@@ -118,7 +132,7 @@ export function MeetingFileUpload({
 
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    if (!isUploading) {
+    if (!isUploading && !isFull) {
       setIsDragOver(true);
     }
   }
@@ -156,17 +170,32 @@ export function MeetingFileUpload({
                 <ProgressBar.Fill />
               </ProgressBar.Track>
             </ProgressBar>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Загрузка… {uploadState.progress}%
-            </p>
-            <Button
-              variant="outline"
-              className="min-h-11 self-center"
-              onPress={() => abortRef.current?.abort()}
-            >
-              Отменить
-            </Button>
+            {/* Once every byte is sent the server is saving the file. Cancelling
+                then could leave a stored file that the list never shows, so the
+                button goes away at 100%. */}
+            {uploadState.progress < 100 ? (
+              <>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  Загрузка… {uploadState.progress}%
+                </p>
+                <Button
+                  variant="outline"
+                  className="min-h-11 self-center"
+                  onPress={() => abortRef.current?.abort()}
+                >
+                  Отменить
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Файл передан, сервер сохраняет его…
+              </p>
+            )}
           </div>
+        ) : isFull ? (
+          <p className="text-zinc-700 dark:text-zinc-300">
+            {FULL_MEETING_MESSAGE}
+          </p>
         ) : (
           <>
             <p className="text-zinc-700 dark:text-zinc-300">
