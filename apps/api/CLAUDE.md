@@ -28,6 +28,14 @@ Modules:
   - `queries/` - `ListMeetingsQuery` and `GetMeetingQuery` with their handlers. Handlers filter by the owner, so other users' meetings are invisible.
   - `meetings.controller.ts` - guarded by `JwtAuthGuard`, calls the buses only.
   - Endpoints (all need `Authorization: Bearer <token>`): `POST /meetings` (201), `GET /meetings`, `GET /meetings/:id` (404 when not found or not owned).
+- `src/meeting-files/` - `MeetingFilesModule`, built on CQRS. Uploads go to `MEETING_FILES_DIR` through multer (`MulterModule`, `diskStorage`, generated file names):
+  - `meeting-file.policy.ts` - pure rules: extension and MIME pairs, 500 MB limit, 5 files per meeting, filename decoding. Unit-tested in `meeting-file.policy.spec.ts`.
+  - `meeting-files.config.ts` - reads `MEETING_FILES_DIR`. `MeetingFilesModule` creates the directory on startup.
+  - `upload-meeting-file.guard.ts` - runs before the body is read; sends `AssertCanUploadMeetingFileQuery` (404 or 409), so refused uploads never reach disk.
+  - `max-content-length.interceptor.ts` - 413 from the `Content-Length` header before multer reads the body.
+  - `commands/` - `UploadMeetingFileCommand` and its handler. Locks the meeting row (`FOR UPDATE`), rechecks the count, and removes the temporary file if anything fails.
+  - `queries/` - `ListMeetingFilesQuery` and `AssertCanUploadMeetingFileQuery` with their handlers.
+  - `meeting-files.controller.ts` - `POST /meetings/:id/files` (201; field `file`) and `GET /meetings/:id/files`. Both need `Authorization: Bearer <token>`.
 
 CQRS (`@nestjs/cqrs`) conventions for new features. The full description is in `README.md` under "CQRS".
 
@@ -44,6 +52,7 @@ Environment (`apps/api/.env`, see `.env.example`):
 - `JWT_SECRET` - required; the app fails to start without it.
 - `JWT_EXPIRES_IN` - token lifetime (default `1h`).
 - `PORT` - HTTP port (default `3000`).
+- `MEETING_FILES_DIR` - directory for uploaded meeting files (default `./storage/meeting-files`, git-ignored). Created on startup.
 
 ## Commands
 
@@ -57,8 +66,8 @@ Run from `apps/api` or from the repo root with `pnpm --filter api <script>`:
 
 Test suites (details in `README.md` under "Tests"):
 
-- Unit: none yet (`passWithNoTests` is set in `vitest.config.ts`). No database needed.
-- E2E: `test/auth.e2e-spec.ts` (register and login), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state.
+- Unit: `src/meeting-files/meeting-file.policy.spec.ts`. No database needed.
+- E2E: `test/auth.e2e-spec.ts` (register and login), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload and list). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
 - The auth e2e tests check only the token's shape, not its signature. `JWT_SECRET` is loaded from `.env` by `ConfigModule`, so a test could verify the signature if it needs to.
 - `pnpm lint` - `oxlint --type-aware src/ test/`
 - `pnpm format` - Prettier over `src/` and `test/`
