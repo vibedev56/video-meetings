@@ -7,15 +7,19 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { AuthModule } from '../auth/auth.module.js';
+import { DeleteMeetingFileHandler } from './commands/delete-meeting-file.handler.js';
 import { UploadMeetingFileHandler } from './commands/upload-meeting-file.handler.js';
+import { MeetingFileStorage } from './meeting-file.storage.js';
 import {
   decodeMultipartFilename,
   isAllowedMeetingFileType,
   MAX_FILE_SIZE_BYTES,
+  MAX_FORM_FIELDS,
 } from './meeting-file.policy.js';
 import { getMeetingFilesDir } from './meeting-files.config.js';
 import { MeetingFilesController } from './meeting-files.controller.js';
 import { AssertCanUploadMeetingFileHandler } from './queries/assert-can-upload-meeting-file.handler.js';
+import { GetMeetingFileHandler } from './queries/get-meeting-file.handler.js';
 import { ListMeetingFilesHandler } from './queries/list-meeting-files.handler.js';
 import { UploadMeetingFileGuard } from './upload-meeting-file.guard.js';
 
@@ -36,7 +40,14 @@ import { UploadMeetingFileGuard } from './upload-meeting-file.guard.js';
               `${randomUUID()}${extname(file.originalname).toLowerCase()}`,
             ),
         }),
-        limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
+        // Without field and part limits, a chunked request could carry any number
+        // of text parts. Each text field is also capped at 1 MB (busboy default).
+        limits: {
+          fileSize: MAX_FILE_SIZE_BYTES,
+          files: 1,
+          fields: MAX_FORM_FIELDS,
+          parts: MAX_FORM_FIELDS + 1,
+        },
         // Runs before anything is written, so a rejected type never reaches disk.
         fileFilter: (_req, file, cb) => {
           file.originalname = decodeMultipartFilename(file.originalname);
@@ -60,8 +71,12 @@ import { UploadMeetingFileGuard } from './upload-meeting-file.guard.js';
     UploadMeetingFileHandler,
     ListMeetingFilesHandler,
     AssertCanUploadMeetingFileHandler,
+    GetMeetingFileHandler,
+    DeleteMeetingFileHandler,
     UploadMeetingFileGuard,
+    MeetingFileStorage,
   ],
+  exports: [MeetingFileStorage],
 })
 export class MeetingFilesModule implements OnModuleInit {
   constructor(private readonly config: ConfigService) {}
