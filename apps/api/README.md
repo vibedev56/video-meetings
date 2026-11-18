@@ -69,11 +69,14 @@ Meeting endpoints need `Authorization: Bearer <accessToken>`; without a valid to
 - `POST /meetings` - body `{ "title", "date", "participants" }`, where `date` is an ISO 8601 date-time and `participants` is an array of e-mails. Creates a meeting owned by the current user and returns it with status 201.
 - `GET /meetings` - returns the current user's meetings, ordered by date.
 - `GET /meetings/:id` - returns one meeting. Returns 404 if it does not exist or belongs to another user.
+- `DELETE /meetings/:id` - deletes the meeting, its file records, and its files on disk. Returns 204. Returns 404 for another user's meeting.
 
 Meeting file endpoints also need the Bearer token.
 
-- `POST /meetings/:id/files` - multipart form with one file in the `file` field. Returns the stored file with status 201. Limits: 500 MB per file (413, checked against `Content-Length` before the body is read, and while streaming), extension and MIME type must match a pair in the allow-list: mp3, wav, m4a, ogg, mp4, webm, mov (400), at most 5 files per meeting (409). Returns 404 for another user's meeting. A rejected upload leaves no file on disk.
+- `POST /meetings/:id/files` - multipart form with one file in the `file` field. Returns the stored file with status 201. Limits: 500 MB per file (413, checked against `Content-Length` before the body is read, and while streaming), extension and MIME type must match a pair in the allow-list: mp3, wav, m4a, ogg, mp4, webm, mov (400), at most 5 files per meeting (409). The form may carry at most 10 text fields besides the file (400). Returns 404 for another user's meeting. A rejected upload leaves no file on disk.
 - `GET /meetings/:id/files` - returns the meeting's files in upload order (`id`, `originalName`, `sizeBytes`, `mimeType`, `uploadedAt`). Returns 404 for another user's meeting.
+- `GET /meetings/:id/files/:fileId` - streams the file with its stored bytes. `Content-Disposition` is `attachment` with the original name in `filename*` (RFC 5987, so Cyrillic names work). Returns 404 for another user's meeting, an unknown file, or a file missing from disk.
+- `DELETE /meetings/:id/files/:fileId` - removes the file record and the file on disk. Returns 204. Returns 404 for another user's meeting or an unknown file.
 
 ## CQRS
 
@@ -140,14 +143,14 @@ The suite uses [Vitest](https://vitest.dev) with globals enabled (`describe`, `i
 
 There are two kinds of tests:
 
-- **Unit tests** are `src/**/*.spec.ts`, next to the code they check. Config: `vitest.config.ts`. They don't need a database. Current suite: `src/meeting-files/meeting-file.policy.spec.ts` (extension and MIME pairs, the 500 MB and 5-file boundaries, filename decoding).
+- **Unit tests** are `src/**/*.spec.ts`, next to the code they check. Config: `vitest.config.ts`. They don't need a database. Current suites: `src/meeting-files/meeting-file.policy.spec.ts` (extension and MIME pairs, the 500 MB and 5-file boundaries, filename decoding), `src/meeting-files/meeting-file.storage.spec.ts` (removing listed files, ignoring files already gone from disk), and `src/meeting-files/content-disposition.spec.ts` (the `Content-Disposition` header for ASCII and Cyrillic names).
 - **End-to-end tests** are `test/**/*.e2e-spec.ts`. They boot the full `AppModule`, send real HTTP requests with `supertest`, and use the real PostgreSQL database. Config: `vitest.config.e2e.ts`.
 
 | File                             | What it covers                                                                                                                                                           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `test/auth.e2e-spec.ts`          | Registration (201, 409 on duplicate e-mail, 400 on invalid input) and login (200, 401 for a wrong password or unknown e-mail, 400 on invalid input). Checks that login doesn't create users and that the token has a valid JWT shape. |
 | `test/meeting.e2e-spec.ts`       | Creating, listing, and getting meetings. Checks 401 without a token, 400 on invalid input, 404 for missing meetings, and that users can't see each other's meetings. |
-| `test/meeting-files.e2e-spec.ts` | Uploading and listing meeting files. Covers mp3 and mov uploads, Cyrillic names, 413 (Content-Length), 400 (type, no file), 409 (sixth file), 404 (foreign or missing meeting), 401 (no or invalid token), and that rejected uploads leave nothing on disk. Each test uses its own temporary `MEETING_FILES_DIR`. |
+| `test/meeting-files.e2e-spec.ts` | Uploading, listing, downloading, and deleting meeting files, and deleting meetings. Covers mp3 and mov uploads, Cyrillic names, 413 (Content-Length), 400 (type, no file), 409 (sixth file), 404 (foreign, missing, or already-deleted files and meetings), 401 (no or invalid token), that rejected uploads leave nothing on disk, that downloads match the uploaded SHA-256 with the right `Content-Disposition`, that deleting a file or meeting removes its bytes from disk, and that deleting a meeting keeps other meetings' files. Each test uses its own temporary `MEETING_FILES_DIR`. |
 
 Each e2e test creates its own users with random e-mails, so tests don't depend on each other's data. The auth tests check the token's shape (three base64url parts, `sub` claim) but don't verify the signature. The signing secret is loaded from `.env` by `ConfigModule`, so a signature check is possible if a test needs one.
 

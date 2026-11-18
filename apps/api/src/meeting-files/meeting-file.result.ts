@@ -18,3 +18,11 @@ export function toMeetingFileResult(file: MeetingFile): MeetingFileResult {
     uploadedAt: file.uploadedAt,
   };
 }
+
+/** What the download response needs. `path` stays on the server; the controller never sends it. */
+export interface MeetingFileDownloadResult {
+  path: string;
+  originalName: string;
+  sizeBytes: number;
+  mimeType: string;
+}
