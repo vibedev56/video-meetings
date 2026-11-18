@@ -24,8 +24,23 @@ model Meeting {
   participants String[]
   createdAt    DateTime @default(now())
   ownerId      String
-  owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  files        MeetingFile[]
 
   @@index([ownerId])
   @@map("meetings")
+}
+
+model MeetingFile {
+  id           String   @id @default(uuid())
+  meetingId    String
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  originalName String
+  storedName   String   @unique
+  sizeBytes    Int
+  mimeType     String
+  uploadedAt   DateTime @default(now())
+
+  @@index([meetingId])
+  @@map("meeting_files")
 }
