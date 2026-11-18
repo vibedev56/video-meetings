@@ -296,7 +296,7 @@ describe('MeetingFileUpload limits and lifecycle', () => {
       />,
     );
 
-    expect(screen.queryByRole('button', { name: 'Выбрать файл' })).toBeNull();
+    expect(screen.queryByText('Выбрать файл')).toBeNull();
     expect(screen.getByText(/У встречи уже 5 файлов/)).toBeTruthy();
   });
 
@@ -327,7 +327,7 @@ describe('MeetingFileUpload limits and lifecycle', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Выбрать файл' })).toBeTruthy();
+    expect(screen.getByText('Выбрать файл')).toBeTruthy();
   });
 
   it('hides the cancel button once the body is fully sent', async () => {

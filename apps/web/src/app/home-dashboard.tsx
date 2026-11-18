@@ -4,6 +4,7 @@ import { Alert, Button, Card, Chip, Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { CreateMeetingDialog } from './create-meeting-dialog';
 import { listMeetings, type MeetingResponse } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import {
@@ -166,9 +167,7 @@ function ReadyContent({
             </span>
           </Card.Content>
         </Card>
-        <Button size="lg" className="min-h-12 w-full sm:flex-1">
-          Создать встречу
-        </Button>
+        <CreateMeetingDialog />
       </div>
 
       <section

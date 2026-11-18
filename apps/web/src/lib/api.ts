@@ -119,6 +119,18 @@ export function listMeetings(token: string) {
   });
 }
 
+/** `POST /meetings`. `date` is an ISO 8601 string. Rejects with 400 on invalid data. */
+export function createMeeting(
+  token: string,
+  meeting: { title: string; date: string; participants: string[] },
+) {
+  return apiRequest<MeetingResponse>('/meetings', {
+    method: 'POST',
+    headers: authorization(token),
+    body: JSON.stringify(meeting),
+  });
+}
+
 /** `GET /meetings/:id`. Rejects with 404 if the meeting does not exist or belongs to another user. */
 export function getMeeting(token: string, meetingId: string) {
   return apiRequest<MeetingResponse>(
