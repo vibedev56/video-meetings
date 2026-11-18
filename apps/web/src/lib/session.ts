@@ -1,3 +1,5 @@
+import { hasStatus } from './api';
+
 /** localStorage key for the access token. Shared by the login, register and home pages. */
 const ACCESS_TOKEN_KEY = 'accessToken';
 
@@ -24,6 +26,22 @@ export function clearAccessToken() {
   } catch {
     // Nothing to clear if storage is unavailable.
   }
+}
+
+/**
+ * If `error` is a 401 from the API, drops the stored token and sends the user
+ * to the login page. Returns true when it did, so the caller can stop.
+ */
+export function redirectToLoginIfUnauthorized(
+  error: unknown,
+  router: { replace: (href: string) => void },
+): boolean {
+  if (!hasStatus(error, 401)) {
+    return false;
+  }
+  clearAccessToken();
+  router.replace('/auth/login');
+  return true;
 }
 
 /**
