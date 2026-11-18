@@ -79,3 +79,7 @@ Test suites (details in `README.md` under "Tests"):
 - Prisma schema is `prisma/schema.prisma`; config is `prisma.config.ts` (loads `.env` via `dotenv`). The client is generated into `src/generated/prisma/`, which is git-ignored. Do not edit it; run `pnpm db:generate` instead. Import the client from `../generated/prisma/client.js`.
 - Change the schema with `pnpm db:migrate` and commit the generated `prisma/migrations/` folder.
 - Global `ValidationPipe` (`whitelist: true`) is registered as `APP_PIPE` in `AppModule`, so it applies to the e2e tests too.
+
+## File upload
+
+Use this research for it: @docs/research-meeting-file-upload.md
