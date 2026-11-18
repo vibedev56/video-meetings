@@ -6,6 +6,8 @@ coverage/
 out/
 *.tsbuildinfo
 next-env.d.ts
+/screenshots
+/.playwright-mcp
 
 .env*
 !.env.example

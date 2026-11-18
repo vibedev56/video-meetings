@@ -6,10 +6,10 @@ Guidance for Claude Code when working in this repository.
 
 `video-meetings` is a pnpm monorepo with two apps:
 
-| Path       | Stack   | Purpose     |
-| ---------- | ------- | ----------- |
-| `apps/web` | Next.js | Web client  |
-| `apps/api` | NestJS  | Backend API |
+| Path       | Stack            | Purpose                           |
+| ---------- | ---------------- | --------------------------------- |
+| `apps/web` | Next.js + HeroUI | Web client                        |
+| `apps/api` | NestJS           | Backend API (Prisma + PostgreSQL) |
 
 App-specific guidance lives in `apps/web/CLAUDE.md` and `apps/api/CLAUDE.md`. Read the one for the app you are changing before editing it.
 
@@ -17,13 +17,15 @@ App-specific guidance lives in `apps/web/CLAUDE.md` and `apps/api/CLAUDE.md`. Re
 
 Run from the repo root:
 
-- `pnpm install` - install all workspace dependencies
+- `pnpm install` - install all workspace dependencies (its `prepare` script installs the Husky git hooks)
 - `pnpm dev` - run web and api together
 - `pnpm dev:web` / `pnpm dev:api` - run one app
 - `pnpm build` - build every app
 - `pnpm lint` - lint every app
 - `pnpm test` - run tests in every app that has them
 - `pnpm format` / `pnpm format:check` - Prettier write / check
+- `docker compose up -d postgres` - start PostgreSQL 17 from `docker-compose.yml` (defaults: user/password `postgres`, db `video_meetings`, port `5432`; override via `POSTGRES_*` env vars)
+- `pnpm --filter api db:migrate` - create and apply a Prisma migration in development (`db:deploy` applies existing migrations only)
 
 Use `pnpm --filter <app> <script>` to target a single app (`web` or `api`).
 
@@ -35,6 +37,8 @@ Use `pnpm --filter <app> <script>` to target a single app (`web` or `api`).
 - Formatting: Prettier with `singleQuote: true` and `trailingComma: "all"`. `.editorconfig` sets LF line endings, 2-space indentation, UTF-8, and a final newline. Run `pnpm format` before finishing a change.
 - `.env*` files are git-ignored (except `.env.example`). Never commit secrets or `.env` contents.
 - Generated output (`dist/`, `.next/`, `*.tsbuildinfo`, `next-env.d.ts`) is git-ignored. Do not edit it by hand.
+- Git hooks use **Husky** (v9, root devDependency). `.husky/pre-commit` runs `pnpm lint && pnpm test && pnpm --filter api test:e2e` on every commit. The hook is installed by the root `prepare` script (`git config core.hooksPath .husky/_`). Do not skip it with `--no-verify`; fix the failure instead.
+- The e2e step needs PostgreSQL running and migrated before every commit. Run `docker compose up -d postgres` and then `pnpm --filter api db:deploy`. If the database is not reachable, the commit fails at the e2e step.
 
 ## Working in this repo
 

@@ -8,5 +8,7 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    // No unit tests exist yet; without this, `pnpm test` exits with an error.
+    passWithNoTests: true,
   },
 });

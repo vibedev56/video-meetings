@@ -23,13 +23,103 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Backend API for video-meetings: [NestJS](https://github.com/nestjs/nest) with [Prisma](https://www.prisma.io) on PostgreSQL. It provides user registration and login, both returning a JWT.
 
 ## Project setup
 
+Start PostgreSQL from the repo root (see the root README for port settings):
+
 ```bash
-$ pnpm install
+$ docker compose up -d postgres
 ```
+
+Create the local env file and fill it in:
+
+```bash
+$ cp .env.example .env
+```
+
+- `DATABASE_URL` - point it at the published port. If port 5432 is taken, use the `POSTGRES_PORT` you set (for example 5433).
+- `JWT_SECRET` - a long random string. The app will not start without it.
+
+Then install, apply migrations, and run:
+
+```bash
+$ pnpm install              # also runs `prisma generate`
+$ pnpm db:deploy            # apply existing migrations
+$ pnpm dev:api              # from the repo root; or `pnpm start:dev` here
+```
+
+## Modules
+
+- `AppModule` (`src/app.module.ts`) - root module. Registers the global `ValidationPipe` and imports the feature modules below.
+- `PrismaModule` (`src/prisma/`) - global `PrismaService`, the shared database client.
+- `UsersModule` (`src/users/`) - stores and looks up users. Handled by CQRS commands and queries. Knows nothing about passwords or tokens.
+- `AuthModule` (`src/auth/`) - registration, login, token signing (`AuthTokenService`), and `JwtAuthGuard`. Gets user data from `UsersModule` through the buses, not by importing it.
+- `MeetingsModule` (`src/meetings/`) - meetings, built on CQRS. Uses `AuthModule` for `JwtAuthGuard`.
+- `MeetingFilesModule` (`src/meeting-files/`) - files attached to a meeting, built on CQRS. Stores uploads in `MEETING_FILES_DIR` through multer (`diskStorage`) under generated names. Creates the directory at startup.
+
+## Endpoints
+
+- `POST /auth/register` - body `{ "email", "password" }` (password at least 8 characters). Creates the user and returns `{ "accessToken" }` with status 201. Returns 409 if the e-mail is taken.
+- `POST /auth/login` - body `{ "email", "password" }`. Looks up the existing user and returns `{ "accessToken" }`. Returns 401 for a wrong password or unknown e-mail.
+
+Meeting endpoints need `Authorization: Bearer <accessToken>`; without a valid token they return 401.
+
+- `POST /meetings` - body `{ "title", "date", "participants" }`, where `date` is an ISO 8601 date-time and `participants` is an array of e-mails. Creates a meeting owned by the current user and returns it with status 201.
+- `GET /meetings` - returns the current user's meetings, ordered by date.
+- `GET /meetings/:id` - returns one meeting. Returns 404 if it does not exist or belongs to another user.
+
+Meeting file endpoints also need the Bearer token.
+
+- `POST /meetings/:id/files` - multipart form with one file in the `file` field. Returns the stored file with status 201. Limits: 500 MB per file (413, checked against `Content-Length` before the body is read, and while streaming), extension and MIME type must match a pair in the allow-list: mp3, wav, m4a, ogg, mp4, webm, mov (400), at most 5 files per meeting (409). Returns 404 for another user's meeting. A rejected upload leaves no file on disk.
+- `GET /meetings/:id/files` - returns the meeting's files in upload order (`id`, `originalName`, `sizeBytes`, `mimeType`, `uploadedAt`). Returns 404 for another user's meeting.
+
+## CQRS
+
+The API uses [`@nestjs/cqrs`](https://docs.nestjs.com/recipes/cqrs). Every operation is either a command (changes state) or a query (reads state), and the controller sends it to the matching bus.
+
+- **Command**: changes state and may return a result. Written as a `*.command.ts` class, handled by a `*.handler.ts` class with `@CommandHandler(...)`, and sent with `CommandBus.execute()`. Example: `CreateMeetingCommand`.
+- **Query**: reads state and never changes it. Written as a `*.query.ts` class, handled by a `*.handler.ts` class with `@QueryHandler(...)`, and sent with `QueryBus.execute()`. Example: `GetMeetingQuery`.
+
+Each feature has the same layout:
+
+```text
+src/meetings/
+  commands/   create-meeting.command.ts, create-meeting.handler.ts
+  queries/    list-meetings.query.ts, list-meetings.handler.ts, get-meeting.query.ts, get-meeting.handler.ts
+  dto/        create-meeting.dto.ts          (validated input from HTTP)
+  meeting.result.ts                          (result type and mapper for the response)
+  meetings.controller.ts                     (HTTP routes, bus calls only)
+  meetings.module.ts                         (imports CqrsModule, registers handlers)
+```
+
+Rules:
+
+1. **Controllers call buses, not services.** The controller validates input through a DTO, turns it into a command or query, and returns what the bus returns. It contains no business logic.
+2. **Commands and queries are plain data classes.** They have `readonly` constructor parameters and no methods. Put the logic in the handler.
+3. **Register every handler in its module's `providers`.** The module must import `CqrsModule`. If a handler is missing, dispatching throws `No handler found for the command: "<name>"` (or `...for the query`).
+4. **Pass the acting user in the command or query.** Handlers scope data by it, for example `where: { ownerId }`, so a user can't read or change another user's data.
+5. **Throw Nest HTTP exceptions from handlers.** `NotFoundException`, `ConflictException`, and `UnauthorizedException` map directly to responses.
+6. **Return result types, not database models.** Map Prisma rows with a mapper such as `toMeetingResult()` so that persistence types don't leak into responses.
+7. **Queries must not write.** If a read needs a side effect, make it a command.
+
+Handlers are plain classes, so they can be unit-tested by constructing them with a fake dependency (for example `new GetMeetingHandler(fakePrisma)`). The e2e tests in `test/` go through HTTP and the real database.
+
+Handlers use `PrismaService` directly, which is the same in every module.
+
+### Modules talk through the buses
+
+The `auth` and `users` modules do not import each other. `AuthModule` only imports `CqrsModule`, and it reaches user data by sending commands and queries to `UsersModule`:
+
+- `RegisterUserHandler` hashes the password, then sends `CreateUserCommand` (`users/commands/`).
+- `LoginUserHandler` sends `FindUserByEmailQuery` (`users/queries/`) and checks the password.
+
+Both modules register their handlers, and `CqrsModule` puts them all on one bus. So a module that sends a command or query needs no import of the module that handles it. Cross-module messages return types from `users/user.result.ts`, and the auth module decides what to do with them.
+
+## Database changes
+
+Edit `prisma/schema.prisma`, then run `pnpm db:migrate` to create and apply a migration. Commit the new folder under `prisma/migrations/`.
 
 ## Compile and run the project
 
@@ -44,18 +134,47 @@ $ pnpm run start:dev
 $ pnpm run start:prod
 ```
 
-## Run tests
+## Tests
+
+The suite uses [Vitest](https://vitest.dev) with globals enabled (`describe`, `it`, `expect`). Mocks use `vi.fn()`.
+
+There are two kinds of tests:
+
+- **Unit tests** are `src/**/*.spec.ts`, next to the code they check. Config: `vitest.config.ts`. They don't need a database. Current suite: `src/meeting-files/meeting-file.policy.spec.ts` (extension and MIME pairs, the 500 MB and 5-file boundaries, filename decoding).
+- **End-to-end tests** are `test/**/*.e2e-spec.ts`. They boot the full `AppModule`, send real HTTP requests with `supertest`, and use the real PostgreSQL database. Config: `vitest.config.e2e.ts`.
+
+| File                             | What it covers                                                                                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `test/auth.e2e-spec.ts`          | Registration (201, 409 on duplicate e-mail, 400 on invalid input) and login (200, 401 for a wrong password or unknown e-mail, 400 on invalid input). Checks that login doesn't create users and that the token has a valid JWT shape. |
+| `test/meeting.e2e-spec.ts`       | Creating, listing, and getting meetings. Checks 401 without a token, 400 on invalid input, 404 for missing meetings, and that users can't see each other's meetings. |
+| `test/meeting-files.e2e-spec.ts` | Uploading and listing meeting files. Covers mp3 and mov uploads, Cyrillic names, 413 (Content-Length), 400 (type, no file), 409 (sixth file), 404 (foreign or missing meeting), 401 (no or invalid token), and that rejected uploads leave nothing on disk. Each test uses its own temporary `MEETING_FILES_DIR`. |
+
+Each e2e test creates its own users with random e-mails, so tests don't depend on each other's data. The auth tests check the token's shape (three base64url parts, `sub` claim) but don't verify the signature. The signing secret is loaded from `.env` by `ConfigModule`, so a signature check is possible if a test needs one.
+
+Before running the e2e tests:
+
+1. Start PostgreSQL (see "Project setup").
+2. Apply migrations with `pnpm db:deploy`.
+3. Make sure `apps/api/.env` has `DATABASE_URL` and `JWT_SECRET`. The app won't start without them.
 
 ```bash
 # unit tests
 $ pnpm run test
 
-# e2e tests
+# unit tests in watch mode
+$ pnpm run test:watch
+
+# e2e tests (needs the database)
 $ pnpm run test:e2e
 
-# test coverage
+# run one e2e file (the argument is a filter on the file path)
+$ pnpm exec vitest run --config ./vitest.config.e2e.ts auth
+
+# coverage for unit tests
 $ pnpm run test:cov
 ```
+
+Run `pnpm lint` and `pnpm test` after a change, and `pnpm test:e2e` when the change touches HTTP behaviour or the database.
 
 ## Deployment
 

@@ -14,7 +14,18 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. The registration page is at [http://localhost:3000/register](http://localhost:3000/register).
+
+If the API does not run on `http://localhost:3000` (it defaults to port 3000, the same as Next.js), start Next on another port and point the web app at the API:
+
+```bash
+# apps/web/.env.local
+API_URL=http://localhost:3000
+
+pnpm exec next dev -p 3001
+```
+
+Requests to `/api/*` are forwarded to `API_URL`. Restart `pnpm dev` after changing `API_URL`.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
