@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { mkdtemp, readdir, rm, stat, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -65,6 +65,40 @@ describe('Meeting files (e2e)', () => {
       .set('Authorization', `Bearer ${token}`);
 
   const filesOnDisk = () => readdir(storageDir);
+
+  const sha256 = (bytes: Buffer) =>
+    createHash('sha256').update(bytes).digest('hex');
+
+  /** Collects the raw response body, so binary downloads compare byte for byte. */
+  // The parser type comes from supertest, so the callback matches its signature.
+  type ResponseParser = Extract<
+    Parameters<ReturnType<ReturnType<typeof request>['get']>['parse']>[0],
+    (res: never, callback: never) => void
+  >;
+
+  const readBinary: ResponseParser = (res, callback) => {
+    const chunks: Buffer[] = [];
+    res.on('data', (chunk: Buffer) => chunks.push(chunk));
+    res.on('error', (err: Error) => callback(err, Buffer.alloc(0)));
+    res.on('end', () => callback(null, Buffer.concat(chunks)));
+  };
+
+  const download = (token: string, meetingId: string, fileId: string) =>
+    request(server())
+      .get(`/meetings/${meetingId}/files/${fileId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .buffer(true)
+      .parse(readBinary);
+
+  const deleteFile = (token: string, meetingId: string, fileId: string) =>
+    request(server())
+      .delete(`/meetings/${meetingId}/files/${fileId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+  const deleteMeeting = (token: string, meetingId: string) =>
+    request(server())
+      .delete(`/meetings/${meetingId}`)
+      .set('Authorization', `Bearer ${token}`);
 
   beforeEach(async () => {
     storageDir = await mkdtemp(join(tmpdir(), 'meeting-files-'));
@@ -290,6 +324,176 @@ describe('Meeting files (e2e)', () => {
         .get(`/meetings/${meetingId}/files`)
         .set('Authorization', 'Bearer not-a-real-token')
         .expect(401);
+    });
+  });
+
+  describe('GET /meetings/:id/files/:fileId', () => {
+    it('returns the stored bytes with the same SHA-256 and a UTF-8 file name', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+      const name = 'Запись встречи.mp3';
+      const content = randomBytes(4096);
+
+      const uploaded = await upload(token, meetingId, {
+        ...MP3,
+        name,
+        content,
+      }).expect(201);
+
+      const res = await download(token, meetingId, uploaded.body.id).expect(
+        200,
+      );
+
+      expect(sha256(res.body as Buffer)).toBe(sha256(content));
+      expect(res.headers['content-type']).toContain('audio/mpeg');
+      expect(res.headers['content-length']).toBe(String(content.length));
+      expect(res.headers['content-disposition']).toBe(
+        `attachment; filename="______ _______.mp3"; filename*=UTF-8''${encodeURIComponent(name)}`,
+      );
+    });
+
+    it('returns 404 for a file that belongs to another of the user’s meetings', async () => {
+      const token = await registerUser();
+      const meetingA = await createMeeting(token);
+      const meetingB = await createMeeting(token);
+      const uploaded = await upload(token, meetingA, MP3).expect(201);
+
+      await download(token, meetingB, uploaded.body.id).expect(404);
+    });
+
+    it('returns 404 for a meeting owned by another user', async () => {
+      const ownerToken = await registerUser();
+      const otherToken = await registerUser();
+      const meetingId = await createMeeting(ownerToken);
+      const uploaded = await upload(ownerToken, meetingId, MP3).expect(201);
+
+      await download(otherToken, meetingId, uploaded.body.id).expect(404);
+    });
+
+    it('returns 404 for an unknown file id', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+
+      await download(token, meetingId, randomUUID()).expect(404);
+    });
+
+    it('returns 404 when the row exists but the bytes are gone from disk', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+      const uploaded = await upload(token, meetingId, MP3).expect(201);
+      const [stored] = await filesOnDisk();
+      await unlink(join(storageDir, stored));
+
+      await download(token, meetingId, uploaded.body.id).expect(404);
+    });
+
+    it('returns 401 without a token', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+      const uploaded = await upload(token, meetingId, MP3).expect(201);
+
+      await request(server())
+        .get(`/meetings/${meetingId}/files/${uploaded.body.id}`)
+        .expect(401);
+    });
+  });
+
+  describe('DELETE /meetings/:id/files/:fileId', () => {
+    it('removes the row and the file on disk, and a later download gives 404', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+      const kept = await upload(token, meetingId, MOV).expect(201);
+      const removed = await upload(token, meetingId, MP3).expect(201);
+
+      await deleteFile(token, meetingId, removed.body.id).expect(204);
+
+      expect(await filesOnDisk()).toHaveLength(1);
+      await download(token, meetingId, removed.body.id).expect(404);
+      await download(token, meetingId, kept.body.id).expect(200);
+      const list = await listFiles(token, meetingId).expect(200);
+      expect(list.body.map((file: { id: string }) => file.id)).toEqual([
+        kept.body.id,
+      ]);
+    });
+
+    it('returns 404 for a meeting owned by another user and leaves the file in place', async () => {
+      const ownerToken = await registerUser();
+      const otherToken = await registerUser();
+      const meetingId = await createMeeting(ownerToken);
+      const uploaded = await upload(ownerToken, meetingId, MP3).expect(201);
+
+      await deleteFile(otherToken, meetingId, uploaded.body.id).expect(404);
+
+      expect(await filesOnDisk()).toHaveLength(1);
+      const list = await listFiles(ownerToken, meetingId).expect(200);
+      expect(list.body).toHaveLength(1);
+    });
+
+    it('returns 404 for an unknown file id', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+
+      await deleteFile(token, meetingId, randomUUID()).expect(404);
+    });
+
+    it('returns 401 without a token', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+      const uploaded = await upload(token, meetingId, MP3).expect(201);
+
+      await request(server())
+        .delete(`/meetings/${meetingId}/files/${uploaded.body.id}`)
+        .expect(401);
+
+      expect(await filesOnDisk()).toHaveLength(1);
+    });
+  });
+
+  describe('DELETE /meetings/:id', () => {
+    it('removes the meeting, its files on disk and its rows, and keeps other meetings intact', async () => {
+      const token = await registerUser();
+      const doomed = await createMeeting(token);
+      const survivor = await createMeeting(token);
+      await upload(token, doomed, MP3).expect(201);
+      await upload(token, doomed, MOV).expect(201);
+      const keptFile = await upload(token, survivor, MP3).expect(201);
+
+      await deleteMeeting(token, doomed).expect(204);
+
+      expect(await filesOnDisk()).toHaveLength(1);
+      await request(server())
+        .get(`/meetings/${doomed}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+      await download(token, survivor, keptFile.body.id).expect(200);
+    });
+
+    it('returns 404 for a meeting owned by another user and leaves its files in place', async () => {
+      const ownerToken = await registerUser();
+      const otherToken = await registerUser();
+      const meetingId = await createMeeting(ownerToken);
+      await upload(ownerToken, meetingId, MP3).expect(201);
+
+      await deleteMeeting(otherToken, meetingId).expect(404);
+
+      expect(await filesOnDisk()).toHaveLength(1);
+      await request(server())
+        .get(`/meetings/${meetingId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+    });
+
+    it('returns 404 for a meeting that does not exist', async () => {
+      const token = await registerUser();
+
+      await deleteMeeting(token, randomUUID()).expect(404);
+    });
+
+    it('returns 401 without a token', async () => {
+      const token = await registerUser();
+      const meetingId = await createMeeting(token);
+
+      await request(server()).delete(`/meetings/${meetingId}`).expect(401);
     });
   });
 

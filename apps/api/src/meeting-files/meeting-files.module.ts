@@ -7,7 +7,9 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { AuthModule } from '../auth/auth.module.js';
+import { DeleteMeetingFileHandler } from './commands/delete-meeting-file.handler.js';
 import { UploadMeetingFileHandler } from './commands/upload-meeting-file.handler.js';
+import { MeetingFileStorage } from './meeting-file.storage.js';
 import {
   decodeMultipartFilename,
   isAllowedMeetingFileType,
@@ -16,6 +18,7 @@ import {
 import { getMeetingFilesDir } from './meeting-files.config.js';
 import { MeetingFilesController } from './meeting-files.controller.js';
 import { AssertCanUploadMeetingFileHandler } from './queries/assert-can-upload-meeting-file.handler.js';
+import { GetMeetingFileHandler } from './queries/get-meeting-file.handler.js';
 import { ListMeetingFilesHandler } from './queries/list-meeting-files.handler.js';
 import { UploadMeetingFileGuard } from './upload-meeting-file.guard.js';
 
@@ -60,8 +63,12 @@ import { UploadMeetingFileGuard } from './upload-meeting-file.guard.js';
     UploadMeetingFileHandler,
     ListMeetingFilesHandler,
     AssertCanUploadMeetingFileHandler,
+    GetMeetingFileHandler,
+    DeleteMeetingFileHandler,
     UploadMeetingFileGuard,
+    MeetingFileStorage,
   ],
+  exports: [MeetingFileStorage],
 })
 export class MeetingFilesModule implements OnModuleInit {
   constructor(private readonly config: ConfigService) {}

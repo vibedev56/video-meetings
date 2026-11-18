@@ -1,21 +1,32 @@
 import {
   BadRequestException,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
+  StreamableFile,
   UseGuards,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import { createReadStream } from 'node:fs';
 import type { AuthUser } from '../auth/auth-user.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { DeleteMeetingFileCommand } from './commands/delete-meeting-file.command.js';
 import { UploadMeetingFileCommand } from './commands/upload-meeting-file.command.js';
-import type { MeetingFileResult } from './meeting-file.result.js';
+import { buildAttachmentDisposition } from './content-disposition.js';
+import type {
+  MeetingFileDownloadResult,
+  MeetingFileResult,
+} from './meeting-file.result.js';
 import { MaxContentLengthInterceptor } from './max-content-length.interceptor.js';
+import { GetMeetingFileQuery } from './queries/get-meeting-file.query.js';
 import { ListMeetingFilesQuery } from './queries/list-meeting-files.query.js';
 import { UploadMeetingFileGuard } from './upload-meeting-file.guard.js';
 
@@ -58,5 +69,34 @@ export class MeetingFilesController {
     @Param('id') meetingId: string,
   ): Promise<MeetingFileResult[]> {
     return this.queryBus.execute(new ListMeetingFilesQuery(user.id, meetingId));
+  }
+
+  @Get(':fileId')
+  async download(
+    @CurrentUser() user: AuthUser,
+    @Param('id') meetingId: string,
+    @Param('fileId') fileId: string,
+  ): Promise<StreamableFile> {
+    const file: MeetingFileDownloadResult = await this.queryBus.execute(
+      new GetMeetingFileQuery(user.id, meetingId, fileId),
+    );
+
+    return new StreamableFile(createReadStream(file.path), {
+      type: file.mimeType,
+      length: file.sizeBytes,
+      disposition: buildAttachmentDisposition(file.originalName),
+    });
+  }
+
+  @Delete(':fileId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @CurrentUser() user: AuthUser,
+    @Param('id') meetingId: string,
+    @Param('fileId') fileId: string,
+  ): Promise<void> {
+    await this.commandBus.execute(
+      new DeleteMeetingFileCommand(user.id, meetingId, fileId),
+    );
   }
 }
