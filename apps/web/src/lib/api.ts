@@ -184,6 +184,88 @@ export function deleteMeetingFile(
   );
 }
 
+/** Extracts the `message` from an error body, or returns `fallback`. */
+function errorMessageFrom(text: string, fallback: string): string {
+  try {
+    const message = (JSON.parse(text) as ErrorBody | null)?.message;
+    if (Array.isArray(message)) {
+      return message.join(', ');
+    }
+    return message ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Progress callback for an upload: percentage from 0 to 100. */
+export type UploadProgress = (percent: number) => void;
+
+/**
+ * `POST /meetings/:id/files` (multipart field `file`). Uses `XMLHttpRequest`
+ * because `fetch` cannot report upload progress.
+ *
+ * Resolves with the stored file. Rejects with `ApiError` for HTTP errors and
+ * network failures. Aborting `signal` calls `xhr.abort()` and rejects with an
+ * `AbortError` (`DOMException`), so the caller can tell a cancel from a failure.
+ */
+export function uploadMeetingFile(
+  token: string,
+  meetingId: string,
+  file: File,
+  options: { signal?: AbortSignal; onProgress?: UploadProgress } = {},
+): Promise<MeetingFileResponse> {
+  const { signal, onProgress } = options;
+
+  return new Promise<MeetingFileResponse>((resolve, reject) => {
+    const abortError = () =>
+      new DOMException('Загрузка отменена', 'AbortError');
+
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    xhr.open('POST', `/api/meetings/${encodeURIComponent(meetingId)}/files`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.responseType = 'text';
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onProgress?.(Math.floor((event.loaded * 100) / event.total));
+      }
+    };
+
+    xhr.onload = () => {
+      const text = xhr.responseText;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(text) as MeetingFileResponse);
+        } catch {
+          reject(new ApiError(0, NETWORK_ERROR_MESSAGE));
+        }
+        return;
+      }
+      reject(
+        new ApiError(
+          xhr.status,
+          errorMessageFrom(text, xhr.statusText || 'Ошибка сервера'),
+        ),
+      );
+    };
+    xhr.onerror = () => reject(new ApiError(0, NETWORK_ERROR_MESSAGE));
+    xhr.ontimeout = () => reject(new ApiError(0, NETWORK_ERROR_MESSAGE));
+    xhr.onabort = () => reject(abortError());
+
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true });
+
+    xhr.send(formData);
+  });
+}
+
 /**
  * Reads the file name from a `Content-Disposition` header. Prefers the
  * RFC 5987 `filename*` parameter, which carries non-ASCII names.

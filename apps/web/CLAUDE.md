@@ -31,13 +31,14 @@ Run from `apps/web` or from the repo root with `pnpm --filter web <script>`:
   4. Report what was checked in the final message. A UI task is not complete until this check is done.
   5. Save every screenshot taken during visual verification in the repo-root `screenshots/` folder, not in the repo root or `.playwright-mcp/`. When calling `mcp__playwright__browser_take_screenshot`, pass a `filename` that starts with `screenshots/` (for example, `screenshots/register-mobile-dark.png`). Create the folder if it does not exist.
 - `next-env.d.ts` is generated and git-ignored. Do not edit it.
-- Current state: `layout.tsx` has the app metadata (title "Видеовстречи"). `page.tsx` is still the default template. The registration screen is at `/register`. The meeting page is at `/meetings/[id]` (`page.tsx` server component with Suspense, `meeting-detail.tsx` and `meeting-files.tsx` client components). It lists, downloads and deletes (with a HeroUI Modal confirmation) the meeting's files.
+- Current state: `layout.tsx` has the app metadata (title "Видеовстречи"). `page.tsx` is still the default template. The registration screen is at `/register`. The meeting page is at `/meetings/[id]` (`page.tsx` server component with Suspense, `meeting-detail.tsx` and `meeting-files.tsx` client components). It lists, uploads (`meeting-file-upload.tsx`: dialog or drag-and-drop, one file at a time, XHR progress and cancel), downloads and deletes (with a HeroUI Modal confirmation) the meeting's files.
 
 ## API access
 
 - The browser calls the API only through `/api/*` on the web origin. `next.config.ts` rewrites `/api/:path*` to `${API_URL}/:path*`, so `/api/auth/register` reaches `POST /auth/register` in `apps/api`. No CORS setup is needed.
 - `API_URL` is read on the server when Next starts. Default: `http://localhost:3000`. Set it in `apps/web/.env.local` (git-ignored) if the API runs elsewhere.
 - `src/lib/api.ts` holds the typed request helper (`apiRequest`, `ApiError`) and the API calls (`registerUser`, `getMeeting`, `listMeetingFiles`, `downloadMeetingFile`, `deleteMeetingFile`). Add new endpoints there. A network failure is an `ApiError` with status `0`.
+- `uploadMeetingFile` in `src/lib/api.ts` uploads through `XMLHttpRequest` (for progress); cancel with an `AbortSignal`, which rejects with an `AbortError`. `src/lib/file-validation.ts` checks format and size in the browser (it mirrors the API's allowed MIME pairs and 500 MB limit). `src/lib/upload-errors.ts` maps upload statuses to Russian messages.
 - `src/lib/format.ts` formats file sizes and dates in Russian. `src/lib/api.test.ts` and `src/lib/format.test.ts` cover the API client and formatting.
 - `src/lib/file-download.ts` saves a download. With `showSaveFilePicker` (Chromium) the body streams straight into the chosen file. Otherwise it is collected into a Blob, which holds the whole file in memory. Call `pickSaveFile` from the click handler before any `await`, because the browser needs a user gesture for the dialog.
 - `src/lib/session.ts` has `redirectToLoginIfUnauthorized`, which clears the token and sends a 401 to `/auth/login`. Use it instead of repeating the check.
