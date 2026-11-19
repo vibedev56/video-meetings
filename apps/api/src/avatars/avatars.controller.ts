@@ -8,6 +8,7 @@ import {
   Logger,
   NotFoundException,
   Put,
+  Req,
   Res,
   UploadedFile,
   UseGuards,
@@ -15,7 +16,7 @@ import {
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { once } from 'node:events';
 import { createReadStream } from 'node:fs';
 import { pipeline } from 'node:stream';
@@ -27,6 +28,17 @@ import { UploadAvatarCommand } from './commands/upload-avatar.command.js';
 import { MaxAvatarContentLengthInterceptor } from './max-avatar-content-length.interceptor.js';
 import type { AvatarFileResult } from './queries/avatar.result.js';
 import { GetAvatarQuery } from './queries/get-avatar.query.js';
+
+/** True when If-None-Match lists the ETag (or `*`). */
+function matchesEtag(header: string | undefined, etag: string): boolean {
+  if (!header) {
+    return false;
+  }
+  return header
+    .split(',')
+    .map((tag) => tag.trim().replace(/^W\//, ''))
+    .some((tag) => tag === '*' || tag === etag);
+}
 
 @Controller('profile/avatar')
 @UseGuards(JwtAuthGuard)
@@ -57,11 +69,26 @@ export class AvatarsController {
   @Get()
   async download(
     @CurrentUser() user: AuthUser,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     const avatar: AvatarFileResult = await this.queryBus.execute(
       new GetAvatarQuery(user.id),
     );
+
+    const headers = {
+      ETag: avatar.etag,
+      // Stops a browser from guessing a different type, and makes it ask again
+      // (with If-None-Match) so a changed avatar is never served from a stale
+      // cache.
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'private, no-cache',
+    };
+
+    if (matchesEtag(req.headers['if-none-match'], avatar.etag)) {
+      res.status(HttpStatus.NOT_MODIFIED).set(headers).end();
+      return;
+    }
 
     const stream = createReadStream(avatar.path);
     try {
@@ -72,13 +99,7 @@ export class AvatarsController {
       throw new NotFoundException('Avatar not found');
     }
 
-    res.set({
-      'Content-Type': avatar.mimeType,
-      // Stops a browser from guessing a different type, and keeps a changed
-      // avatar from being served from a stale cache.
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'private, no-cache',
-    });
+    res.set({ ...headers, 'Content-Type': avatar.mimeType });
 
     pipeline(stream, res, (error) => {
       if (error) {

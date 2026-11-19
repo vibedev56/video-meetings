@@ -54,7 +54,7 @@ Modules:
   - `commands/` - `UploadAvatarCommand` and its handler. Locks the user row (`FOR UPDATE`), saves the new name, then removes the previous file; removes the new file if anything fails.
   - `avatar.storage.ts` - `AvatarStorage` maps stored names to paths and removes files. Missing files are ignored.
   - `commands/` also has `DeleteAvatarCommand` and its handler (locks the user row, clears `avatarFile`, then removes the file; 204 even without an avatar, 404 if the user is gone). `queries/` has `GetAvatarQuery` and its handler (returns the file path and MIME type; 404 when there is no avatar).
-  - `avatars.controller.ts` - `PUT /profile/avatar` (200; field `file`; returns `{ hasAvatar: true }`), `GET /profile/avatar` (streams the caller's own avatar with its image `Content-Type`; 404 without one) and `DELETE /profile/avatar` (204), guarded by `JwtAuthGuard`. `hasAvatar` in the profile is `avatarFile !== null`.
+  - `avatars.controller.ts` - `PUT /profile/avatar` (200; field `file`; returns `{ hasAvatar: true }`), `GET /profile/avatar` (streams the caller's own avatar with its image `Content-Type` and an `ETag` that changes on every upload; answers 304 to a matching `If-None-Match`; 404 without one) and `DELETE /profile/avatar` (204), guarded by `JwtAuthGuard`. `hasAvatar` in the profile is `avatarFile !== null`.
 
 CQRS (`@nestjs/cqrs`) conventions for new features. The full description is in `README.md` under "CQRS".
 
