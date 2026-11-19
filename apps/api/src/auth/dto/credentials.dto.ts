@@ -9,6 +9,16 @@ export class LoginDto {
   password: string;
 }
 
+export class ChangePasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  oldPassword: string;
+
+  @IsString()
+  @IsNotEmpty()
+  newPassword: string;
+}
+
 export class RegisterDto {
   @IsEmail()
   email: string;
