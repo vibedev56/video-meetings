@@ -73,7 +73,7 @@ Run from `apps/api` or from the repo root with `pnpm --filter api <script>`:
 
 Test suites (details in `README.md` under "Tests"):
 
-- Unit: `src/meeting-files/*.spec.ts` (policy, storage cleanup, `Content-Disposition`). No database needed.
+- Unit: `src/meeting-files/*.spec.ts` (policy, storage cleanup, `Content-Disposition`) and `src/users/**/*-profile.handler.spec.ts` (profile handlers with a mocked Prisma). No database needed.
 - E2E: `test/auth.e2e-spec.ts` (register and login), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload, list, download, delete, and meeting delete). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
 - The auth e2e tests check only the token's shape, not its signature. `JWT_SECRET` is loaded from `.env` by `ConfigModule`, so a test could verify the signature if it needs to.
 - `pnpm lint` - `oxlint --type-aware src/ test/`
