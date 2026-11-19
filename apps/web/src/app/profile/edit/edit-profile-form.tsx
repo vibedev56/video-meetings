@@ -201,6 +201,22 @@ function NameSection({ profile }: { profile: ProfileResponse }) {
 
 /** The API answers a wrong old password with 401 and this message. */
 const WRONG_OLD_PASSWORD_MESSAGE = 'Invalid credentials';
+/** The API answers a new password equal to the old one with 400 and this message. */
+const SAME_PASSWORD_MESSAGE = 'New password must differ from the old password';
+
+/** Mirror `PASSWORD_MIN_LENGTH` and `PASSWORD_MAX_LENGTH` in the API. */
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 72;
+
+function validateNewPassword(value: string) {
+  if (value.length < MIN_PASSWORD_LENGTH) {
+    return `Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов`;
+  }
+  if (value.length > MAX_PASSWORD_LENGTH) {
+    return `Пароль должен быть не длиннее ${MAX_PASSWORD_LENGTH} символов`;
+  }
+  return null;
+}
 
 function PasswordSection() {
   const router = useRouter();
@@ -208,16 +224,22 @@ function PasswordSection() {
   const [newPassword, setNewPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
+  // Validation is shown only after the first submit attempt.
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
   async function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
+    setHasAttemptedSubmit(true);
+    setGeneralError(null);
+    if (validateNewPassword(newPassword)) {
+      return;
+    }
 
     const token = requireAccessToken(router);
     if (!token) {
       return;
     }
 
-    setGeneralError(null);
     setIsSubmitting(true);
 
     try {
@@ -225,6 +247,8 @@ function PasswordSection() {
       // The session stays valid: the token is not touched.
       setOldPassword('');
       setNewPassword('');
+      // Do not validate the emptied field.
+      setHasAttemptedSubmit(false);
     } catch (error) {
       // A wrong old password is not a lost session; any other 401 is.
       const isWrongOldPassword =
@@ -234,7 +258,19 @@ function PasswordSection() {
       if (!isWrongOldPassword && redirectToLoginIfUnauthorized(error, router)) {
         return;
       }
-      setGeneralError('Не удалось сменить пароль. Попробуйте позже.');
+      if (isWrongOldPassword) {
+        setGeneralError('Неверный старый пароль');
+      } else if (
+        error instanceof ApiError &&
+        error.status === 400 &&
+        error.message === SAME_PASSWORD_MESSAGE
+      ) {
+        setGeneralError('Новый пароль должен отличаться от старого');
+      } else if (error instanceof ApiError && error.status === 0) {
+        setGeneralError('Сервер недоступен. Проверьте подключение.');
+      } else {
+        setGeneralError('Не удалось сменить пароль. Попробуйте позже.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -282,6 +318,9 @@ function PasswordSection() {
             type="password"
             value={newPassword}
             onChange={setNewPassword}
+            validate={(value) =>
+              hasAttemptedSubmit ? validateNewPassword(value) : null
+            }
             autoComplete="new-password"
             isDisabled={isSubmitting}
           >

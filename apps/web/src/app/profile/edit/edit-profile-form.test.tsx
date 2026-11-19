@@ -392,6 +392,85 @@ describe('EditProfileForm', () => {
       expect(localStorage.getItem('accessToken')).toBeNull();
     });
 
+    async function submitPasswords(oldValue: string, newValue: string) {
+      const { oldPassword, newPassword } = await findPasswordFields();
+      fireEvent.change(oldPassword, { target: { value: oldValue } });
+      fireEvent.change(newPassword, { target: { value: newValue } });
+      fireEvent.click(screen.getByRole('button', { name: 'Сменить пароль' }));
+    }
+
+    it('rejects a new password shorter than 8 characters without calling the API', async () => {
+      render(<EditProfileForm />);
+
+      await submitPasswords('old-password', 'short');
+
+      expect(
+        await screen.findByText('Пароль должен быть не короче 8 символов'),
+      ).toBeTruthy();
+      expect(apiMock.changePassword).not.toHaveBeenCalled();
+    });
+
+    it('rejects a new password longer than 72 characters', async () => {
+      render(<EditProfileForm />);
+
+      await submitPasswords('old-password', 'a'.repeat(73));
+
+      expect(
+        await screen.findByText('Пароль должен быть не длиннее 72 символов'),
+      ).toBeTruthy();
+      expect(apiMock.changePassword).not.toHaveBeenCalled();
+    });
+
+    it('accepts new passwords of exactly 8 and 72 characters', async () => {
+      apiMock.changePassword.mockResolvedValue(null);
+      render(<EditProfileForm />);
+
+      await submitPasswords('old-password', 'a'.repeat(8));
+      await waitFor(() =>
+        expect(apiMock.changePassword).toHaveBeenCalledTimes(1),
+      );
+
+      await submitPasswords('old-password', 'a'.repeat(72));
+      await waitFor(() =>
+        expect(apiMock.changePassword).toHaveBeenCalledTimes(2),
+      );
+    });
+
+    it('shows a specific message for a wrong old password', async () => {
+      apiMock.changePassword.mockRejectedValue(
+        new ApiError(401, 'Invalid credentials'),
+      );
+      render(<EditProfileForm />);
+
+      await submitPasswords('wrong-password', 'new-password');
+
+      expect(await screen.findByText('Неверный старый пароль')).toBeTruthy();
+    });
+
+    it('shows a specific message when the new password equals the old one', async () => {
+      apiMock.changePassword.mockRejectedValue(
+        new ApiError(400, 'New password must differ from the old password'),
+      );
+      render(<EditProfileForm />);
+
+      await submitPasswords('same-password', 'same-password');
+
+      expect(
+        await screen.findByText('Новый пароль должен отличаться от старого'),
+      ).toBeTruthy();
+    });
+
+    it('shows a connection error when the server is unreachable', async () => {
+      apiMock.changePassword.mockRejectedValue(new ApiError(0, 'network'));
+      render(<EditProfileForm />);
+
+      await submitPasswords('old-password', 'new-password');
+
+      expect(
+        await screen.findByText('Сервер недоступен. Проверьте подключение.'),
+      ).toBeTruthy();
+    });
+
     it('clears both fields after a successful change and keeps the session', async () => {
       apiMock.changePassword.mockResolvedValue(null);
       render(<EditProfileForm />);
