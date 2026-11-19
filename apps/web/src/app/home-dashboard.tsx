@@ -5,8 +5,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { CreateMeetingDialog } from './create-meeting-dialog';
-import { listMeetings, type MeetingResponse } from '@/lib/api';
+import {
+  ApiError,
+  getProfile,
+  listMeetings,
+  type MeetingResponse,
+} from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+import { displayName } from '@/lib/profile';
 import {
   clearAccessToken,
   getAccessToken,
@@ -21,7 +27,7 @@ type LoadState =
   | { status: 'error' }
   | {
       status: 'ready';
-      email: string;
+      name: string;
       meetings: MeetingResponse[];
     };
 
@@ -50,9 +56,22 @@ export function HomeDashboard() {
 
       setState({ status: 'loading' });
       try {
-        const meetings = await listMeetings(token);
+        const [profile, meetings] = await Promise.all([
+          // The name is cosmetic: on a non-auth failure show the email instead.
+          getProfile(token).catch((error: unknown) => {
+            if (error instanceof ApiError && error.status === 401) {
+              throw error;
+            }
+            return null;
+          }),
+          listMeetings(token),
+        ]);
         if (!isCancelled) {
-          setState({ status: 'ready', email, meetings });
+          setState({
+            status: 'ready',
+            name: profile ? displayName(profile) : email,
+            meetings,
+          });
         }
       } catch (error) {
         if (isCancelled) {
@@ -81,21 +100,23 @@ export function HomeDashboard() {
     <div className="flex min-h-screen flex-col bg-linear-to-br from-indigo-50 via-white to-violet-100 dark:from-zinc-950 dark:via-zinc-950 dark:to-indigo-950">
       <header className="sticky top-0 z-10 border-b border-black/5 bg-white/70 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-4 py-3">
-          <span className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+          <span className="shrink-0 text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
             Видеовстречи
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <Link
               href="/profile"
-              className="flex min-h-11 items-center px-2 text-sm font-medium text-zinc-700 underline-offset-4 hover:underline dark:text-zinc-300"
+              className="flex min-h-11 min-w-0 items-center px-2 text-sm font-medium text-zinc-700 underline-offset-4 hover:underline dark:text-zinc-300"
             >
-              Профиль
+              <span className="max-w-24 truncate min-[420px]:max-w-40 sm:max-w-64">
+                {state.status === 'ready' ? state.name : 'Профиль'}
+              </span>
             </Link>
             <Button
               variant="outline"
               size="sm"
               onPress={handleLogout}
-              className="min-h-11 min-w-11"
+              className="min-h-11 min-w-11 shrink-0"
             >
               Выйти
             </Button>
@@ -134,7 +155,7 @@ export function HomeDashboard() {
         )}
 
         {state.status === 'ready' && (
-          <ReadyContent email={state.email} meetings={state.meetings} />
+          <ReadyContent name={state.name} meetings={state.meetings} />
         )}
       </main>
     </div>
@@ -142,10 +163,10 @@ export function HomeDashboard() {
 }
 
 function ReadyContent({
-  email,
+  name,
   meetings,
 }: {
-  email: string;
+  name: string;
   meetings: MeetingResponse[];
 }) {
   const recentMeetings = sortByDateDesc(meetings).slice(
@@ -157,7 +178,7 @@ function ReadyContent({
     <>
       <section className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-          Здравствуйте, <span className="break-words">{email}</span>!
+          Здравствуйте, <span className="break-words">{name}</span>!
         </h1>
         <p className="text-zinc-600 dark:text-zinc-400">
           Здесь собраны ваши видеовстречи.
