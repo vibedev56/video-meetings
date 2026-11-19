@@ -224,6 +224,7 @@ function PasswordSection() {
   const [newPassword, setNewPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
   // Validation is shown only after the first submit attempt.
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
@@ -231,6 +232,7 @@ function PasswordSection() {
     event.preventDefault();
     setHasAttemptedSubmit(true);
     setGeneralError(null);
+    setIsSaved(false);
     if (validateNewPassword(newPassword)) {
       return;
     }
@@ -249,6 +251,7 @@ function PasswordSection() {
       setNewPassword('');
       // Do not validate the emptied field.
       setHasAttemptedSubmit(false);
+      setIsSaved(true);
     } catch (error) {
       // A wrong old password is not a lost session; any other 401 is.
       const isWrongOldPassword =
@@ -291,6 +294,17 @@ function PasswordSection() {
         className="flex flex-col gap-6"
       >
         <Card.Content className="flex flex-col gap-5">
+          {isSaved && (
+            <Alert status="success">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>Пароль изменён</Alert.Title>
+                <Alert.Description>
+                  Вы остались в системе — входить заново не нужно.
+                </Alert.Description>
+              </Alert.Content>
+            </Alert>
+          )}
           {generalError && (
             <Alert status="danger">
               <Alert.Indicator />
@@ -304,7 +318,10 @@ function PasswordSection() {
             name="oldPassword"
             type="password"
             value={oldPassword}
-            onChange={setOldPassword}
+            onChange={(value) => {
+              setOldPassword(value);
+              setIsSaved(false);
+            }}
             autoComplete="current-password"
             isDisabled={isSubmitting}
           >
@@ -317,7 +334,10 @@ function PasswordSection() {
             name="newPassword"
             type="password"
             value={newPassword}
-            onChange={setNewPassword}
+            onChange={(value) => {
+              setNewPassword(value);
+              setIsSaved(false);
+            }}
             validate={(value) =>
               hasAttemptedSubmit ? validateNewPassword(value) : null
             }

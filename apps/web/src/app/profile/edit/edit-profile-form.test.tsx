@@ -485,5 +485,44 @@ describe('EditProfileForm', () => {
       expect(routerMock.replace).not.toHaveBeenCalled();
       expect(localStorage.getItem('accessToken')).toBe('token-123');
     });
+
+    it('shows a success message after the password is changed', async () => {
+      apiMock.changePassword.mockResolvedValue(null);
+      render(<EditProfileForm />);
+
+      await submitPasswords('old-password', 'new-password');
+
+      expect(await screen.findByText('Пароль изменён')).toBeTruthy();
+      expect(routerMock.replace).not.toHaveBeenCalled();
+    });
+
+    it('hides the success message when the user starts typing again', async () => {
+      apiMock.changePassword.mockResolvedValue(null);
+      render(<EditProfileForm />);
+
+      await submitPasswords('old-password', 'new-password');
+      await screen.findByText('Пароль изменён');
+
+      const { oldPassword } = await findPasswordFields();
+      fireEvent.change(oldPassword, { target: { value: 'x' } });
+
+      expect(screen.queryByText('Пароль изменён')).toBeNull();
+    });
+
+    it('hides the success message when the next attempt fails', async () => {
+      apiMock.changePassword.mockResolvedValueOnce(null);
+      render(<EditProfileForm />);
+
+      await submitPasswords('old-password', 'new-password');
+      await screen.findByText('Пароль изменён');
+
+      apiMock.changePassword.mockRejectedValueOnce(
+        new ApiError(401, 'Invalid credentials'),
+      );
+      await submitPasswords('wrong-password', 'new-password');
+
+      expect(await screen.findByText('Неверный старый пароль')).toBeTruthy();
+      expect(screen.queryByText('Пароль изменён')).toBeNull();
+    });
   });
 });
