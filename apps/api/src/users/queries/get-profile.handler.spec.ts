@@ -25,6 +25,7 @@ describe('GetProfileHandler', () => {
       email: 'a@b.c',
       name: 'Анна',
       hasAvatar: false,
+      avatarVersion: null,
     });
     expect(findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'u1' } }),
@@ -40,6 +41,7 @@ describe('GetProfileHandler', () => {
 
     const result = await handler.execute(new GetProfileQuery('u1'));
     expect(result.hasAvatar).toBe(true);
+    expect(result.avatarVersion).toBe('x');
   });
 
   it('returns a null name when it is not set', async () => {

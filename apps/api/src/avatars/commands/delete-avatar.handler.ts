@@ -1,7 +1,7 @@
-import { NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AvatarStorage } from '../avatar.storage.js';
+import { lockUserAvatar } from '../lock-user-avatar.js';
 import { DeleteAvatarCommand } from './delete-avatar.command.js';
 
 @CommandHandler(DeleteAvatarCommand)
@@ -16,24 +16,16 @@ export class DeleteAvatarHandler implements ICommandHandler<
 
   async execute(command: DeleteAvatarCommand): Promise<void> {
     const previous = await this.prisma.$transaction(async (tx) => {
-      // Locking the user row serializes this with uploads and other deletes,
-      // so the file is removed exactly once and none is orphaned.
-      const rows = await tx.$queryRaw<{ avatarFile: string | null }[]>`
-        SELECT "avatarFile" FROM users WHERE id = ${command.userId}
-        FOR UPDATE`;
+      const current = await lockUserAvatar(tx, command.userId);
 
-      if (rows.length === 0) {
-        throw new NotFoundException('User not found');
-      }
-
-      if (rows[0].avatarFile !== null) {
+      if (current !== null) {
         await tx.user.update({
           where: { id: command.userId },
           data: { avatarFile: null },
         });
       }
 
-      return rows[0].avatarFile;
+      return current;
     });
 
     // The row is cleared first: a failed disk removal leaves an orphan file,

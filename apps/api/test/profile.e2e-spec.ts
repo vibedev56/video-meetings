@@ -44,7 +44,12 @@ describe('Profile (e2e)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
-      expect(res.body).toEqual({ email, name: null, hasAvatar: false });
+      expect(res.body).toEqual({
+        email,
+        name: null,
+        hasAvatar: false,
+        avatarVersion: null,
+      });
     });
 
     it('returns 401 without a token', async () => {
@@ -69,7 +74,12 @@ describe('Profile (e2e)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
-      expect(res.body).toEqual({ email, name: 'Анна', hasAvatar: false });
+      expect(res.body).toEqual({
+        email,
+        name: 'Анна',
+        hasAvatar: false,
+        avatarVersion: null,
+      });
     });
 
     it('returns 404 for a valid token of a deleted user', async () => {
@@ -110,7 +120,12 @@ describe('Profile (e2e)', () => {
       const { email, token } = await registerUser();
 
       const res = await patch(token, { name: 'Анна' }).expect(200);
-      expect(res.body).toEqual({ email, name: 'Анна', hasAvatar: false });
+      expect(res.body).toEqual({
+        email,
+        name: 'Анна',
+        hasAvatar: false,
+        avatarVersion: null,
+      });
 
       const profile = await getProfile(token).expect(200);
       expect(profile.body.name).toBe('Анна');

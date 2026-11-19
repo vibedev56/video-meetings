@@ -23,6 +23,7 @@ import { pipeline } from 'node:stream';
 import type { AuthUser } from '../auth/auth-user.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { createMaxContentLengthInterceptor } from '../common/uploads/max-content-length.interceptor.js';
 import { DeleteMeetingFileCommand } from './commands/delete-meeting-file.command.js';
 import { UploadMeetingFileCommand } from './commands/upload-meeting-file.command.js';
 import { buildAttachmentDisposition } from './content-disposition.js';
@@ -30,10 +31,13 @@ import type {
   MeetingFileDownloadResult,
   MeetingFileResult,
 } from './meeting-file.result.js';
-import { MaxContentLengthInterceptor } from './max-content-length.interceptor.js';
 import { GetMeetingFileQuery } from './queries/get-meeting-file.query.js';
 import { ListMeetingFilesQuery } from './queries/list-meeting-files.query.js';
+import { MAX_REQUEST_BYTES } from './meeting-file.policy.js';
 import { UploadMeetingFileGuard } from './upload-meeting-file.guard.js';
+
+const MaxMeetingFileContentLengthInterceptor =
+  createMaxContentLengthInterceptor(MAX_REQUEST_BYTES, 'File is too large');
 
 @Controller('meetings/:id/files')
 @UseGuards(JwtAuthGuard)
@@ -47,7 +51,10 @@ export class MeetingFilesController {
 
   @Post()
   @UseGuards(UploadMeetingFileGuard)
-  @UseInterceptors(MaxContentLengthInterceptor, FileInterceptor('file'))
+  @UseInterceptors(
+    MaxMeetingFileContentLengthInterceptor,
+    FileInterceptor('file'),
+  )
   upload(
     @CurrentUser() user: AuthUser,
     @Param('id') meetingId: string,

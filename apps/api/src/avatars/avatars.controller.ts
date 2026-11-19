@@ -19,15 +19,22 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { once } from 'node:events';
 import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream';
 import type { AuthUser } from '../auth/auth-user.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { createMaxContentLengthInterceptor } from '../common/uploads/max-content-length.interceptor.js';
+import { MAX_AVATAR_REQUEST_BYTES } from './avatar.policy.js';
 import { DeleteAvatarCommand } from './commands/delete-avatar.command.js';
 import { UploadAvatarCommand } from './commands/upload-avatar.command.js';
-import { MaxAvatarContentLengthInterceptor } from './max-avatar-content-length.interceptor.js';
 import type { AvatarFileResult } from './queries/avatar.result.js';
 import { GetAvatarQuery } from './queries/get-avatar.query.js';
+
+const MaxAvatarContentLengthInterceptor = createMaxContentLengthInterceptor(
+  MAX_AVATAR_REQUEST_BYTES,
+  'Avatar is too large (max 2 MB)',
+);
 
 /** True when If-None-Match lists the ETag (or `*`). */
 function matchesEtag(header: string | undefined, etag: string): boolean {
@@ -62,7 +69,7 @@ export class AvatarsController {
     }
 
     return this.commandBus.execute(
-      new UploadAvatarCommand(user.id, file.filename, file.path),
+      new UploadAvatarCommand(user.id, file.filename),
     );
   }
 
@@ -83,11 +90,22 @@ export class AvatarsController {
       // cache.
       'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'private, no-cache',
+      // Defense in depth for user content: even if the URL is opened directly,
+      // nothing in the file can run scripts.
+      'Content-Security-Policy': "default-src 'none'; sandbox",
+      'Content-Disposition': 'inline; filename="avatar"',
     };
 
     if (matchesEtag(req.headers['if-none-match'], avatar.etag)) {
       res.status(HttpStatus.NOT_MODIFIED).set(headers).end();
       return;
+    }
+
+    let size: number;
+    try {
+      size = (await stat(avatar.path)).size;
+    } catch {
+      throw new NotFoundException('Avatar not found');
     }
 
     const stream = createReadStream(avatar.path);
@@ -99,7 +117,11 @@ export class AvatarsController {
       throw new NotFoundException('Avatar not found');
     }
 
-    res.set({ ...headers, 'Content-Type': avatar.mimeType });
+    res.set({
+      ...headers,
+      'Content-Type': avatar.mimeType,
+      'Content-Length': String(size),
+    });
 
     pipeline(stream, res, (error) => {
       if (error) {

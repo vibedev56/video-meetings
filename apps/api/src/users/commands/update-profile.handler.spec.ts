@@ -22,7 +22,12 @@ describe('UpdateProfileHandler', () => {
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'u1' }, data: { name: 'Анна' } }),
     );
-    expect(result).toEqual({ email: 'a@b.c', name: 'Анна', hasAvatar: false });
+    expect(result).toEqual({
+      email: 'a@b.c',
+      name: 'Анна',
+      hasAvatar: false,
+      avatarVersion: null,
+    });
   });
 
   it('reports hasAvatar when an avatar file is stored', async () => {
@@ -31,6 +36,7 @@ describe('UpdateProfileHandler', () => {
     );
 
     expect(result.hasAvatar).toBe(true);
+    expect(result.avatarVersion).toBe('x');
   });
 
   it.each(['', '   ', '\t\n'])('resets the name for %j', async (input) => {

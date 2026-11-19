@@ -7,6 +7,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
+import { JPEG_BYTES, PNG_BYTES } from './support/avatar-fixtures.js';
 
 const PASSWORD = 'correct-horse-battery-staple';
 const uniqueEmail = () => `user-${randomUUID()}@example.com`;
@@ -26,11 +27,14 @@ describe('Avatar download and delete (e2e)', () => {
     return res.body.accessToken as string;
   };
 
-  const upload = (token: string, content: Buffer) =>
+  const upload = (token: string, content: Buffer, filename = 'me.png') =>
     request(server())
       .put('/profile/avatar')
       .set('Authorization', `Bearer ${token}`)
-      .attach('file', content, { filename: 'me.png', contentType: 'image/png' })
+      .attach('file', content, {
+        filename,
+        contentType: filename.endsWith('.jpg') ? 'image/jpeg' : 'image/png',
+      })
       .expect(200);
 
   const download = (token: string) =>
@@ -64,18 +68,38 @@ describe('Avatar download and delete (e2e)', () => {
 
   it('returns the uploaded bytes with the image MIME type', async () => {
     const token = await registerUser();
-    const content = Buffer.from('png bytes');
+    const content = PNG_BYTES;
     await upload(token, content);
 
     const res = await download(token).expect(200);
 
     expect(res.headers['content-type']).toBe('image/png');
     expect(res.body).toEqual(content);
+    expect(res.headers['content-length']).toBe(String(content.length));
+    expect(res.headers['content-security-policy']).toBe(
+      "default-src 'none'; sandbox",
+    );
+    expect(res.headers['content-disposition']).toBe(
+      'inline; filename="avatar"',
+    );
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  it('puts the ETag value in the profile as avatarVersion', async () => {
+    const token = await registerUser();
+    await upload(token, JPEG_BYTES, 'me.jpg');
+
+    const etag = (await download(token).expect(200)).headers['etag'] as string;
+    const profile = await request(server())
+      .get('/profile')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(etag).toBe(`"${profile.body.avatarVersion}"`);
   });
 
   it('sends an ETag and answers 304 to a matching If-None-Match', async () => {
     const token = await registerUser();
-    await upload(token, Buffer.from('png bytes'));
+    await upload(token, PNG_BYTES);
 
     const first = await download(token).expect(200);
     const etag = first.headers['etag'] as string;
@@ -92,10 +116,10 @@ describe('Avatar download and delete (e2e)', () => {
 
   it('changes the ETag when the avatar is replaced', async () => {
     const token = await registerUser();
-    await upload(token, Buffer.from('one'));
+    await upload(token, PNG_BYTES);
     const etag = (await download(token).expect(200)).headers['etag'] as string;
 
-    await upload(token, Buffer.from('two'));
+    await upload(token, PNG_BYTES);
 
     const res = await request(server())
       .get('/profile/avatar')
@@ -119,17 +143,15 @@ describe('Avatar download and delete (e2e)', () => {
   it('serves each user only their own avatar', async () => {
     const first = await registerUser();
     const second = await registerUser();
-    await upload(first, Buffer.from('first'));
+    await upload(first, PNG_BYTES);
 
     await download(second).expect(404);
-    expect((await download(first).expect(200)).body).toEqual(
-      Buffer.from('first'),
-    );
+    expect((await download(first).expect(200)).body).toEqual(PNG_BYTES);
   });
 
   it('deletes the avatar, its file and the profile flag', async () => {
     const token = await registerUser();
-    await upload(token, Buffer.from('x'));
+    await upload(token, PNG_BYTES);
     expect(await readdir(dir)).toHaveLength(1);
 
     await request(server())
@@ -143,12 +165,13 @@ describe('Avatar download and delete (e2e)', () => {
       .get('/profile')
       .set('Authorization', `Bearer ${token}`);
     expect(profile.body.hasAvatar).toBe(false);
+    expect(profile.body.avatarVersion).toBeNull();
   });
 
   it('does not touch another user avatar on delete', async () => {
     const first = await registerUser();
     const second = await registerUser();
-    await upload(first, Buffer.from('first'));
+    await upload(first, PNG_BYTES);
 
     await request(server())
       .delete('/profile/avatar')

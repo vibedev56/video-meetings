@@ -8,6 +8,8 @@ export interface ProfileResult {
   email: string;
   name: string | null;
   hasAvatar: boolean;
+  /** Changes with every upload; null without an avatar. Lets clients cache the image. */
+  avatarVersion: string | null;
 }
 
 /**

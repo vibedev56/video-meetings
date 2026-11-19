@@ -1,8 +1,12 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { rm } from 'node:fs/promises';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import {
+  AVATAR_SIGNATURE_BYTES,
+  matchesAvatarSignature,
+} from '../avatar.policy.js';
 import { AvatarStorage } from '../avatar.storage.js';
+import { lockUserAvatar } from '../lock-user-avatar.js';
 import { UploadAvatarCommand } from './upload-avatar.command.js';
 
 @CommandHandler(UploadAvatarCommand)
@@ -19,27 +23,31 @@ export class UploadAvatarHandler implements ICommandHandler<
     let previous: string | null;
 
     try {
-      previous = await this.prisma.$transaction(async (tx) => {
-        // Locking the user row serializes concurrent uploads, so each old
-        // file is removed exactly once and none is orphaned.
-        const rows = await tx.$queryRaw<{ avatarFile: string | null }[]>`
-          SELECT "avatarFile" FROM users WHERE id = ${command.userId}
-          FOR UPDATE`;
+      // The extension and MIME type come from the client, so the content is
+      // checked here, before the database is touched.
+      const head = await this.storage.readHead(
+        command.storedName,
+        AVATAR_SIGNATURE_BYTES,
+      );
+      if (!matchesAvatarSignature(command.storedName, head)) {
+        throw new BadRequestException(
+          'File content does not match its format: use a real jpg, png or webp',
+        );
+      }
 
-        if (rows.length === 0) {
-          throw new NotFoundException('User not found');
-        }
+      previous = await this.prisma.$transaction(async (tx) => {
+        const current = await lockUserAvatar(tx, command.userId);
 
         await tx.user.update({
           where: { id: command.userId },
           data: { avatarFile: command.storedName },
         });
 
-        return rows[0].avatarFile;
+        return current;
       });
     } catch (error) {
       // The file is already on disk, so a rejected upload must remove it.
-      await rm(command.filePath, { force: true }).catch(() => undefined);
+      await this.storage.remove(command.storedName);
       throw error;
     }
 

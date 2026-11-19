@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { avatarVersion } from '../../avatars/avatar.policy.js';
 import { ProfileResult } from '../user.result.js';
 import { UpdateProfileCommand } from './update-profile.command.js';
 
@@ -27,6 +28,7 @@ export class UpdateProfileHandler implements ICommandHandler<
         email: user.email,
         name: user.name,
         hasAvatar: user.avatarFile !== null,
+        avatarVersion: user.avatarFile && avatarVersion(user.avatarFile),
       };
     } catch (error) {
       // P2025: the record to update does not exist (for example a deleted user).

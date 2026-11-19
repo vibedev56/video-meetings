@@ -7,10 +7,26 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
-import { MAX_AVATAR_BYTES } from '../src/avatars/avatar.policy.js';
+import {
+  MAX_AVATAR_BYTES,
+  MAX_AVATAR_REQUEST_BYTES,
+} from '../src/avatars/avatar.policy.js';
+import {
+  JPEG_BYTES,
+  PNG_BYTES,
+  pngOfSize,
+  WEBP_BYTES,
+} from './support/avatar-fixtures.js';
 
 const PASSWORD = 'correct-horse-battery-staple';
 const uniqueEmail = () => `user-${randomUUID()}@example.com`;
+
+const contentFor = (name: string): Buffer =>
+  name.endsWith('.webp')
+    ? WEBP_BYTES
+    : name.endsWith('.png')
+      ? PNG_BYTES
+      : JPEG_BYTES;
 
 const PNG = { name: 'me.png', type: 'image/png' };
 
@@ -35,7 +51,7 @@ describe('Avatar upload (e2e)', () => {
   ) => {
     const req = request(server()).put('/profile/avatar');
     if (token) req.set('Authorization', `Bearer ${token}`);
-    return req.attach('file', file.content ?? Buffer.from('fake image'), {
+    return req.attach('file', file.content ?? contentFor(file.name), {
       filename: file.name,
       contentType: file.type,
     });
@@ -72,7 +88,9 @@ describe('Avatar upload (e2e)', () => {
     const res = await upload(token, { name, type }).expect(200);
 
     expect(res.body).toEqual({ hasAvatar: true });
-    expect((await profile(token)).body.hasAvatar).toBe(true);
+    const body = (await profile(token)).body;
+    expect(body.hasAvatar).toBe(true);
+    expect(body.avatarVersion).toEqual(expect.any(String));
     expect(await readdir(dir)).toHaveLength(1);
   });
 
@@ -110,11 +128,54 @@ describe('Avatar upload (e2e)', () => {
 
     await upload(token, {
       ...PNG,
-      content: Buffer.alloc(MAX_AVATAR_BYTES + 1),
+      content: pngOfSize(MAX_AVATAR_BYTES + 1),
     }).expect(413);
 
     expect(await readdir(dir)).toEqual(before);
     expect((await profile(token)).body.hasAvatar).toBe(true);
+  });
+
+  it('rejects a body over the request limit by Content-Length with 413', async () => {
+    const token = await registerUser();
+    await upload(token, PNG).expect(200);
+    const before = await readdir(dir);
+
+    // The interceptor refuses from the header alone, before multer reads
+    // anything, so the declared length is all that matters here.
+    const res = await request(server())
+      .put('/profile/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Length', String(MAX_AVATAR_REQUEST_BYTES + 1))
+      .set('Content-Type', 'multipart/form-data; boundary=x')
+      .send('x')
+      .catch((error: { response?: request.Response }) => error.response);
+
+    expect(res?.status).toBe(413);
+    expect(res?.headers['connection']).toBe('close');
+    expect(await readdir(dir)).toEqual(before);
+  });
+
+  it('rejects a file whose content is not its format and keeps the avatar', async () => {
+    const token = await registerUser();
+    await upload(token, PNG).expect(200);
+    const before = await readdir(dir);
+
+    await upload(token, {
+      ...PNG,
+      content: Buffer.from('<html>not a png</html>'),
+    }).expect(400);
+
+    expect(await readdir(dir)).toEqual(before);
+    expect((await profile(token)).body.hasAvatar).toBe(true);
+  });
+
+  it('rejects a real jpeg that is named .png', async () => {
+    const token = await registerUser();
+
+    await upload(token, { ...PNG, content: JPEG_BYTES }).expect(400);
+
+    expect(await readdir(dir)).toEqual([]);
+    expect((await profile(token)).body.hasAvatar).toBe(false);
   });
 
   it('accepts a file of exactly 2 MB', async () => {
@@ -122,7 +183,7 @@ describe('Avatar upload (e2e)', () => {
 
     await upload(token, {
       ...PNG,
-      content: Buffer.alloc(MAX_AVATAR_BYTES),
+      content: pngOfSize(MAX_AVATAR_BYTES),
     }).expect(200);
   });
 
@@ -130,9 +191,11 @@ describe('Avatar upload (e2e)', () => {
     const token = await registerUser();
     await upload(token, PNG).expect(200);
     const [first] = await readdir(dir);
+    const versionBefore = (await profile(token)).body.avatarVersion;
 
     await upload(token, { name: 'me.webp', type: 'image/webp' }).expect(200);
 
+    expect((await profile(token)).body.avatarVersion).not.toBe(versionBefore);
     const after = await readdir(dir);
     expect(after).toHaveLength(1);
     expect(after[0]).not.toBe(first);
