@@ -126,6 +126,15 @@ export function getProfile(token: string) {
   });
 }
 
+/** `PATCH /profile`. An empty or whitespace-only name resets it. Rejects with 400 for a too long name. */
+export function updateProfile(token: string, name: string) {
+  return apiRequest<ProfileResponse>('/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+    headers: authorization(token),
+  });
+}
+
 /** `GET /meetings` for the user that owns `token`. Rejects with 401 if the token is invalid or expired. */
 export function listMeetings(token: string) {
   return apiRequest<MeetingResponse[]>('/meetings', {

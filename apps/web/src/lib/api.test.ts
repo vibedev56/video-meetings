@@ -6,6 +6,7 @@ import {
   listMeetingFiles,
   listMeetings,
   parseContentDispositionFileName,
+  updateProfile,
 } from './api';
 
 const TOKEN = 'token-123';
@@ -148,6 +149,35 @@ describe('deleteMeetingFile', () => {
     const error = await deleteMeetingFile(TOKEN, 'm1', 'f1').catch((e) => e);
 
     expect(error).toMatchObject({ status: 404 });
+  });
+});
+
+describe('updateProfile', () => {
+  it('sends PATCH /profile with the name and the Bearer token', async () => {
+    const profile = { email: 'a@b.c', name: 'Анна', hasAvatar: false };
+    fetchMock.mockResolvedValue(jsonResponse(profile));
+
+    await expect(updateProfile(TOKEN, 'Анна')).resolves.toEqual(profile);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/profile',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ name: 'Анна' }),
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${TOKEN}`,
+        }),
+      }),
+    );
+  });
+
+  it('rejects with the API status on 400', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'too long' }, 400));
+
+    const error = await updateProfile(TOKEN, 'x').catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(400);
   });
 });
 

@@ -44,6 +44,19 @@ describe('ProfileView', () => {
     expect(apiMock.getProfile).toHaveBeenCalledWith('token-123');
   });
 
+  it('links to the edit page', async () => {
+    apiMock.getProfile.mockResolvedValue({
+      name: null,
+      email: 'ivan@example.com',
+      hasAvatar: false,
+    });
+
+    render(<ProfileView />);
+
+    const link = await screen.findByRole('link', { name: 'Изменить имя' });
+    expect(link.getAttribute('href')).toBe('/profile/edit');
+  });
+
   it('shows the email as the heading when the name is empty', async () => {
     apiMock.getProfile.mockResolvedValue({
       name: null,

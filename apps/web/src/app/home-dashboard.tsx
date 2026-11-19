@@ -84,14 +84,22 @@ export function HomeDashboard() {
           <span className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
             Видеовстречи
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={handleLogout}
-            className="min-h-11 min-w-11"
-          >
-            Выйти
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/profile"
+              className="flex min-h-11 items-center px-2 text-sm font-medium text-zinc-700 underline-offset-4 hover:underline dark:text-zinc-300"
+            >
+              Профиль
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleLogout}
+              className="min-h-11 min-w-11"
+            >
+              Выйти
+            </Button>
+          </div>
         </div>
       </header>
 

@@ -121,6 +121,14 @@ function ProfileCard({ profile }: { profile: ProfileResponse }) {
           </span>
         </div>
       </Card.Content>
+      <Card.Footer>
+        <Link
+          href="/profile/edit"
+          className="flex min-h-11 items-center text-sm font-medium text-indigo-700 underline-offset-4 hover:underline dark:text-indigo-300"
+        >
+          Изменить имя
+        </Link>
+      </Card.Footer>
     </Card>
   );
 }
