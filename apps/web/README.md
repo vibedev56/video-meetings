@@ -36,7 +36,7 @@ pnpm exec next dev -p 3001
 
 Requests to `/api/*` are forwarded to `API_URL`. Restart `pnpm dev` after changing `API_URL`.
 
-The avatar is loaded and saved through `GET`/`PUT`/`DELETE /api/profile/avatar` (JPG, PNG or WebP, up to 2 MB). The API in this branch does not implement these endpoints yet, so the avatar shows initials until it does.
+The avatar is loaded and saved through `GET`/`PUT`/`DELETE /api/profile/avatar` (JPG, PNG or WebP, up to 2 MB).
 
 Run the unit and component tests (Vitest + Testing Library) with:
 
