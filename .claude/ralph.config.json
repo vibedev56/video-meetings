@@ -1,8 +1,24 @@
 {
-  "active": false,
-  "milestone": "Фаза 2: Страницы профиля и имени (frontend)",
+  "active": true,
   "maxIterations": 10,
-  "maxTurns": 50,
-  "branch": "feature/phase-6",
-  "prompt": "Прочитай .claude/ralph.md и следуй правилам оттуда. Возьми следующую открытую Issue из milestone '{milestone}' и реализуй его в '{branch}'"
+  "maxTurns": 500,
+   "prompt": "Прочитай .claude/ralph.md и следуй правилам оттуда. Возьми следующую открытую Issue из milestone '{milestone}' и реализуй его в '{branch}'",
+  "phases": [
+    {
+      "milestone": "Фаза 3: Смена пароля (backend)",
+      "branch": "phase-7"
+    },
+    {
+      "milestone": "Фаза 4: Форма смены пароля (frontend)",
+      "branch": "phase-8"
+    },
+    {
+      "milestone": "Фаза 5: Аватар (backend)",
+      "branch": "phase-9"
+    },
+    {
+      "milestone": "Фаза 6: Аватар в интерфейсе (frontend)",
+      "branch": "phase-10"
+    }
+  ]
 }
