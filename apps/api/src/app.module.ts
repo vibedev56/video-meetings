@@ -6,6 +6,7 @@ import { AvatarsModule } from './avatars/avatars.module.js';
 import { MeetingFilesModule } from './meeting-files/meeting-files.module.js';
 import { MeetingsModule } from './meetings/meetings.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { ProfileModule } from './users/profile.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -13,6 +14,7 @@ import { UsersModule } from './users/users.module.js';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     UsersModule,
+    ProfileModule,
     AuthModule,
     MeetingsModule,
     MeetingFilesModule,

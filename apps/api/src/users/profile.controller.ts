@@ -21,7 +21,11 @@ export class ProfileController {
     return this.queryBus.execute(new GetProfileQuery(user.id));
   }
 
-  /** Always changes the caller's own profile; the id comes from the token. */
+  /**
+   * Changes only the display name (the one editable field for now; avatar and
+   * password have their own endpoints). Always the caller's own profile; the
+   * id comes from the token.
+   */
   @Patch()
   update(
     @CurrentUser() user: AuthUser,
