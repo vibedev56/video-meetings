@@ -69,7 +69,9 @@ describe('ProfileView', () => {
     await waitFor(() =>
       expect(container.querySelectorAll('img')).toHaveLength(2),
     );
-    expect(apiMock.getAvatar).toHaveBeenCalledTimes(1);
+    // One request per size: the thumbnail for the header, the original here.
+    expect(apiMock.getAvatar).toHaveBeenCalledTimes(2);
+    expect(apiMock.getAvatar).toHaveBeenCalledWith('token-123', 'thumb');
     expect(screen.queryByText('ИП')).toBeNull();
   });
 

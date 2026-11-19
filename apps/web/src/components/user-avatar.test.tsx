@@ -33,6 +33,17 @@ describe('UserAvatar', () => {
     expect(apiMock.getAvatar).not.toHaveBeenCalled();
   });
 
+  it('asks for the thumbnail at the small size only', async () => {
+    apiMock.getAvatar.mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
+
+    const { container } = render(
+      <UserAvatar profile={{ ...profile, hasAvatar: true }} size="sm" />,
+    );
+
+    await waitFor(() => expect(container.querySelector('img')).not.toBeNull());
+    expect(apiMock.getAvatar).toHaveBeenCalledWith('token-123', 'thumb');
+  });
+
   it('shows the image when the profile has an avatar', async () => {
     apiMock.getAvatar.mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
 

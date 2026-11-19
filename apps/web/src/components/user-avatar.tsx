@@ -17,7 +17,7 @@ export function UserAvatar({
   profile: ProfileResponse;
   size?: keyof typeof SIZE_CLASSES;
 }) {
-  const url = useAvatarUrl(profile.hasAvatar);
+  const url = useAvatarUrl(profile.hasAvatar, size === 'sm' ? 'thumb' : 'full');
   const classes = `${SIZE_CLASSES[size]} shrink-0 rounded-full`;
 
   if (url) {

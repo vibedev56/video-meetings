@@ -153,12 +153,18 @@ export function uploadAvatar(token: string, file: File) {
   });
 }
 
-/** `GET /profile/avatar`. Resolves with the image. Rejects with 404 when there is no avatar. */
-export async function getAvatar(token: string): Promise<Blob> {
-  const response = await sendRequest('/profile/avatar', {
-    method: 'GET',
-    headers: authorization(token),
-  });
+/**
+ * `GET /profile/avatar`. Resolves with the image; `'thumb'` asks for the small
+ * 128 px webp (`?size=thumb`). Rejects with 404 when there is no avatar.
+ */
+export async function getAvatar(token: string, size?: 'thumb'): Promise<Blob> {
+  const response = await sendRequest(
+    size ? `/profile/avatar?size=${size}` : '/profile/avatar',
+    {
+      method: 'GET',
+      headers: authorization(token),
+    },
+  );
   if (!response.ok) {
     throw await toApiError(response);
   }
