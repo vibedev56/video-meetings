@@ -162,6 +162,28 @@ describe('Profile (e2e)', () => {
       await patch(token, { name: 'a'.repeat(100) }).expect(200);
     });
 
+    it('checks the length after trimming', async () => {
+      const { token } = await registerUser();
+
+      const res = await patch(token, { name: ` ${'a'.repeat(100)} ` }).expect(
+        200,
+      );
+
+      expect(res.body.name).toBe('a'.repeat(100));
+    });
+
+    it.each([
+      ['a NUL byte', 'a\u0000b'],
+      ['a zero-width space', '\u200B'],
+      ['a line break inside', 'a\nb'],
+      ['a bidi override', 'a\u202Eb'],
+    ])('rejects a name with %s', async (_label, name) => {
+      const { token } = await registerUser();
+
+      await patch(token, { name }).expect(400);
+      expect((await getProfile(token).expect(200)).body.name).toBeNull();
+    });
+
     it('rejects a missing or non-string name', async () => {
       const { token } = await registerUser();
 
