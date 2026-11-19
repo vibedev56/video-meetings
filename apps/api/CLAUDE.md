@@ -72,7 +72,7 @@ Environment (`apps/api/.env`, see `.env.example`):
 - `JWT_EXPIRES_IN` - token lifetime (default `1h`).
 - `PORT` - HTTP port (default `3000`).
 - `MEETING_FILES_DIR` - directory for uploaded meeting files (default `./storage/meeting-files`, git-ignored). Created on startup.
-- `AVATARS_DIR` - directory for user avatars (default `./storage/avatars`). Created on startup.
+- `AVATARS_DIR` - directory for user avatars (default `./storage/avatars`, git-ignored). Created on startup.
 
 ## Commands
 
@@ -87,7 +87,7 @@ Run from `apps/api` or from the repo root with `pnpm --filter api <script>`:
 Test suites (details in `README.md` under "Tests"):
 
 - Unit: `src/meeting-files/*.spec.ts` (policy, storage cleanup, `Content-Disposition`) and `src/users/**/*-profile.handler.spec.ts` (profile handlers with a mocked Prisma), `src/auth/password.spec.ts` and `src/auth/commands/change-password.handler.spec.ts` (hash helpers, password change rules). No database needed.
-- E2E: `test/auth.e2e-spec.ts` (register and login), `test/change-password.e2e-spec.ts` (password change), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload, list, download, delete, and meeting delete), `test/avatar-upload.e2e-spec.ts` (avatar upload, replacement, rejection; `AVATARS_DIR` is a temporary directory per test). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
+- E2E: `test/auth.e2e-spec.ts` (register and login), `test/change-password.e2e-spec.ts` (password change), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload, list, download, delete, and meeting delete), `test/avatar-upload.e2e-spec.ts` (avatar upload, replacement, rejection; `AVATARS_DIR` is a temporary directory per test), `test/avatar-download-delete.e2e-spec.ts` (avatar download and delete, isolation between users). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
 - The auth e2e tests check only the token's shape, not its signature. `JWT_SECRET` is loaded from `.env` by `ConfigModule`, so a test could verify the signature if it needs to.
 - `pnpm lint` - `oxlint --type-aware src/ test/`
 - `pnpm format` - Prettier over `src/` and `test/`
