@@ -16,7 +16,7 @@ pnpm monorepo.
 
 ## Git hooks (Husky)
 
-Husky runs `pnpm lint && pnpm test` before every commit (`.husky/pre-commit`). The hooks are installed automatically by `pnpm install` (via the root `prepare` script). If a commit is blocked, fix the lint or test failure; do not bypass the hook with `--no-verify`.
+Husky runs `pnpm lint && pnpm test && pnpm --filter api test:e2e` before every commit (`.husky/pre-commit`). The hooks are installed automatically by `pnpm install` (via the root `prepare` script). If a commit is blocked, fix the lint or test failure; do not bypass the hook with `--no-verify`.
 
 ## Database (PostgreSQL)
 

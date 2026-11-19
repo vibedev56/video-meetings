@@ -43,7 +43,7 @@ Run from `apps/web` or from the repo root with `pnpm --filter web <script>`:
   - `src/lib/use-profile.ts`: `useProfile()` returns `{ state, reload }` and handles the token check, redirects and retry. It keeps one shared profile cache keyed by the access token, so `/`, `/profile` and `/profile/edit` and the header do not refetch it. After `updateProfile` call `setCachedProfile` so the new name shows everywhere at once; call `clearProfileCache` on logout. `useDisplayName()` gives the header/greeting name (the email from the token until the profile loads).
   - `src/lib/use-authorized-load.ts`: `useAuthorizedLoad(load)` does the same for other data (the home page uses it for meetings).
   - `src/lib/profile.ts` has `displayName` (name, or email when the name is empty) and `getInitials` (first letter or digit of up to two words, found with `Intl.Segmenter`, so punctuation is skipped and emoji stay whole).
-  - Tests live next to the components: `profile-view.test.tsx`, `edit-profile-form.test.tsx`, and the home header cases in `home-dashboard.test.tsx`. `vitest.setup.ts` clears the profile cache after each test.
+  - Tests live next to the components: `profile-view.test.tsx`, `edit-profile-form.test.tsx`, `avatar-section.test.tsx`, `user-avatar.test.tsx`, and the home header cases in `home-dashboard.test.tsx`. `vitest.setup.ts` clears the profile cache after each test.
 
 ## API access
 

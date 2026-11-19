@@ -21,8 +21,8 @@ Pages (the profile pages need a logged-in user):
 | Route            | Purpose                                        |
 | ---------------- | ---------------------------------------------- |
 | `/`              | Home: recent meetings, user name in the header |
-| `/profile`       | Profile: name, email and initials              |
-| `/profile/edit`  | Edit the profile (name, avatar upload)         |
+| `/profile`       | Profile: avatar (or initials), name and email  |
+| `/profile/edit`  | Edit the profile (name, avatar, password)      |
 | `/meetings/[id]` | Meeting details and files                      |
 
 If the API does not run on `http://localhost:3000` (it defaults to port 3000, the same as Next.js), start Next on another port and point the web app at the API:
@@ -35,6 +35,8 @@ pnpm exec next dev -p 3001
 ```
 
 Requests to `/api/*` are forwarded to `API_URL`. Restart `pnpm dev` after changing `API_URL`.
+
+The avatar is loaded and saved through `GET`/`PUT`/`DELETE /api/profile/avatar` (JPG, PNG or WebP, up to 2 MB). The API in this branch does not implement these endpoints yet, so the avatar shows initials until it does.
 
 Run the unit and component tests (Vitest + Testing Library) with:
 
