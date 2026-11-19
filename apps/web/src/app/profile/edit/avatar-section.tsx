@@ -3,7 +3,7 @@
 import { Alert, Button, Card, Spinner } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type ChangeEvent } from 'react';
-import { ApiError, uploadAvatar, type ProfileResponse } from '@/lib/api';
+import { ApiError, uploadAvatar } from '@/lib/api';
 import {
   ACCEPTED_AVATAR_EXTENSIONS,
   AVATAR_FILE_TOO_LARGE_MESSAGE,
@@ -14,7 +14,7 @@ import {
   redirectToLoginIfUnauthorized,
   requireAccessToken,
 } from '@/lib/session';
-import { setCachedProfile } from '@/lib/use-profile';
+import { patchCachedProfile } from '@/lib/use-profile';
 
 /** Russian message for a failed upload, by the API status. */
 function uploadErrorMessage(error: unknown): string {
@@ -37,7 +37,7 @@ function uploadErrorMessage(error: unknown): string {
  * «Аватар» section: pick a file, check it in the browser and upload it right
  * away. The shared profile cache is updated so other pages see the change.
  */
-export function AvatarSection({ profile }: { profile: ProfileResponse }) {
+export function AvatarSection() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -69,7 +69,7 @@ export function AvatarSection({ profile }: { profile: ProfileResponse }) {
     setIsUploading(true);
     try {
       await uploadAvatar(token, file);
-      setCachedProfile({ ...profile, hasAvatar: true });
+      patchCachedProfile({ hasAvatar: true });
       setIsSaved(true);
     } catch (caught) {
       if (redirectToLoginIfUnauthorized(caught, router)) {

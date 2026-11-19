@@ -74,6 +74,14 @@ export function setCachedProfile(profile: ProfileResponse) {
   }
 }
 
+/** Changes fields of the cached profile, keeping the rest as they are now. */
+export function patchCachedProfile(patch: Partial<ProfileResponse>) {
+  if (cache && cache.token === getAccessToken()) {
+    cache = { token: cache.token, profile: { ...cache.profile, ...patch } };
+    emit();
+  }
+}
+
 /** Drops the cached profile, for example on logout. */
 export function clearProfileCache() {
   cache = null;

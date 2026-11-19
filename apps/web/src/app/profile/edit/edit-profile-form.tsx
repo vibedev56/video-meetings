@@ -62,7 +62,7 @@ export function EditProfileForm() {
         <LoadError title="Не удалось загрузить профиль" onRetry={reload} />
       )}
       {state.status === 'ready' && <NameSection profile={state.profile} />}
-      {state.status === 'ready' && <AvatarSection profile={state.profile} />}
+      {state.status === 'ready' && <AvatarSection />}
       {state.status === 'ready' && <PasswordSection />}
     </AppShell>
   );
