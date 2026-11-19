@@ -111,6 +111,21 @@ export function loginUser(email: string, password: string) {
   });
 }
 
+/** Profile of the current user as returned by `GET /profile`. */
+export interface ProfileResponse {
+  email: string;
+  name: string | null;
+  hasAvatar: boolean;
+}
+
+/** `GET /profile`. Rejects with 401 if the token is invalid or expired. */
+export function getProfile(token: string) {
+  return apiRequest<ProfileResponse>('/profile', {
+    method: 'GET',
+    headers: authorization(token),
+  });
+}
+
 /** `GET /meetings` for the user that owns `token`. Rejects with 401 if the token is invalid or expired. */
 export function listMeetings(token: string) {
   return apiRequest<MeetingResponse[]>('/meetings', {
