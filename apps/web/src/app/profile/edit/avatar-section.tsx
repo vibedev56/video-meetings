@@ -2,7 +2,7 @@
 
 import { Alert, Button, Card, Spinner } from '@heroui/react';
 import { useRouter } from 'next/navigation';
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ApiError, deleteAvatar, uploadAvatar } from '@/lib/api';
 import {
   ACCEPTED_AVATAR_EXTENSIONS,
@@ -14,7 +14,7 @@ import {
   redirectToLoginIfUnauthorized,
   requireAccessToken,
 } from '@/lib/session';
-import { refreshAvatar } from '@/lib/use-avatar';
+import { forgetAvatar, refreshAvatar } from '@/lib/use-avatar';
 import { patchCachedProfile } from '@/lib/use-profile';
 
 /** Russian message for a failed upload, by the API status. */
@@ -24,11 +24,11 @@ function uploadErrorMessage(error: unknown): string {
       case 0:
         return 'Сервер недоступен. Проверьте подключение.';
       case 400:
-        return 'Сервер не принял файл. Проверьте формат и размер.';
+      case 415:
+        // The API answers 400 for a wrong type (415 is kept for safety).
+        return AVATAR_UNSUPPORTED_FORMAT_MESSAGE;
       case 413:
         return AVATAR_FILE_TOO_LARGE_MESSAGE;
-      case 415:
-        return AVATAR_UNSUPPORTED_FORMAT_MESSAGE;
     }
   }
   return 'Не удалось загрузить аватар. Попробуйте позже.';
@@ -49,10 +49,19 @@ function deleteErrorMessage(error: unknown): string {
 export function AvatarSection({ hasAvatar }: { hasAvatar: boolean }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputButtonRef = useRef<HTMLButtonElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const focusFileButton = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (focusFileButton.current && !isDeleting) {
+      focusFileButton.current = false;
+      inputButtonRef.current?.focus();
+    }
+  }, [isDeleting]);
 
   async function handleDelete() {
     if (isUploading || isDeleting) {
@@ -68,7 +77,10 @@ export function AvatarSection({ hasAvatar }: { hasAvatar: boolean }) {
     setIsDeleting(true);
     try {
       await deleteAvatar(token);
+      forgetAvatar();
       patchCachedProfile({ hasAvatar: false });
+      // The delete button unmounts; focus moves once the section is enabled.
+      focusFileButton.current = true;
       setMessage('Аватар удалён');
     } catch (caught) {
       if (redirectToLoginIfUnauthorized(caught, router)) {
@@ -129,7 +141,7 @@ export function AvatarSection({ hasAvatar }: { hasAvatar: boolean }) {
 
       <Card.Content className="flex flex-col gap-5">
         {message && (
-          <Alert status="success">
+          <Alert status="success" role="status" aria-live="polite">
             <Alert.Indicator />
             <Alert.Content>
               <Alert.Title>{message}</Alert.Title>
@@ -159,6 +171,7 @@ export function AvatarSection({ hasAvatar }: { hasAvatar: boolean }) {
 
       <Card.Footer className="flex flex-wrap gap-3">
         <Button
+          ref={inputButtonRef}
           size="lg"
           isPending={isUploading}
           isDisabled={isDeleting}

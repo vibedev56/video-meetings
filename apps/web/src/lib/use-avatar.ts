@@ -49,24 +49,38 @@ function loadAvatarUrl(token: string): Promise<string> {
         // Superseded or cleared while loading: nobody will use this URL.
         URL.revokeObjectURL(url);
       }
-      if (stale?.url) {
-        URL.revokeObjectURL(stale.url);
-      }
       return url;
     }),
   };
   entry = current;
+  // The previous URL is released whether the new load succeeded or failed.
   // A failed load must not be cached: the next render may retry.
-  current.promise.catch(() => {
-    if (entry === current) {
-      entry = null;
-    }
-  });
+  current.promise
+    .catch(() => {
+      if (entry === current) {
+        entry = null;
+      }
+    })
+    .finally(() => {
+      if (stale?.url) {
+        URL.revokeObjectURL(stale.url);
+      }
+    });
   return current.promise;
 }
 
 /** Call after the avatar was uploaded or replaced, so every avatar reloads. */
 export function refreshAvatar() {
+  version += 1;
+  emit();
+}
+
+/** Releases the loaded avatar after it was deleted. */
+export function forgetAvatar() {
+  if (entry?.url) {
+    URL.revokeObjectURL(entry.url);
+  }
+  entry = null;
   version += 1;
   emit();
 }
@@ -82,15 +96,13 @@ export function clearAvatarCache() {
 }
 
 /**
- * Object URL of the current user's avatar, or null when there is none, it is
- * still loading or loading failed (the caller then shows initials).
+ * Object URL of the current user's avatar, or null when there is none, the
+ * first load is pending or loading failed (the caller then shows initials).
+ * While a replacement loads, the previous image stays visible.
  */
 export function useAvatarUrl(hasAvatar: boolean): string | null {
   const currentVersion = useSyncExternalStore(subscribe, getVersion, () => 0);
-  const [loaded, setLoaded] = useState<{
-    version: number;
-    url: string | null;
-  } | null>(null);
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -101,12 +113,12 @@ export function useAvatarUrl(hasAvatar: boolean): string | null {
     loadAvatarUrl(token).then(
       (url) => {
         if (!isCancelled) {
-          setLoaded({ version: currentVersion, url });
+          setLoadedUrl(url);
         }
       },
       () => {
         if (!isCancelled) {
-          setLoaded({ version: currentVersion, url: null });
+          setLoadedUrl(null);
         }
       },
     );
@@ -115,5 +127,5 @@ export function useAvatarUrl(hasAvatar: boolean): string | null {
     };
   }, [hasAvatar, currentVersion]);
 
-  return hasAvatar && loaded?.version === currentVersion ? loaded.url : null;
+  return hasAvatar ? loadedUrl : null;
 }

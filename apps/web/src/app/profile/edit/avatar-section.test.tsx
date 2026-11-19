@@ -121,7 +121,7 @@ describe('avatar section', () => {
   });
 
   it.each([
-    [400, 'Сервер не принял файл. Проверьте формат и размер.'],
+    [400, AVATAR_UNSUPPORTED_FORMAT_MESSAGE],
     [413, AVATAR_FILE_TOO_LARGE_MESSAGE],
     [415, AVATAR_UNSUPPORTED_FORMAT_MESSAGE],
     [500, 'Не удалось загрузить аватар. Попробуйте позже.'],
@@ -192,6 +192,20 @@ describe('avatar deletion', () => {
     expect(await screen.findByText('Аватар удалён')).toBeTruthy();
     expect(apiMock.deleteAvatar).toHaveBeenCalledWith('token-123');
     await waitFor(() => expect(deleteButton()).toBeNull());
+  });
+
+  it('moves focus to the file button after deleting', async () => {
+    apiMock.getProfile.mockResolvedValue(withAvatar);
+    apiMock.deleteAvatar.mockResolvedValue(null);
+    render(<EditProfileForm />);
+
+    await clickDelete();
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Выбрать файл' }),
+      ),
+    );
   });
 
   it('offers deletion after a fresh upload', async () => {

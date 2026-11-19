@@ -83,7 +83,10 @@ export function patchCachedProfile(patch: Partial<ProfileResponse>) {
   }
 }
 
-/** Drops the cached profile, for example on logout. */
+/**
+ * Drops the cached profile, for example on logout. Also drops the cached
+ * avatar (`clearAvatarCache`), so the two never go out of step.
+ */
 export function clearProfileCache() {
   clearAvatarCache();
   cache = null;
