@@ -8,6 +8,7 @@ import {
   Logger,
   NotFoundException,
   Put,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -76,11 +77,16 @@ export class AvatarsController {
   @Get()
   async download(
     @CurrentUser() user: AuthUser,
+    @Query('size') avatarSize: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
+    if (avatarSize !== undefined && avatarSize !== 'thumb') {
+      throw new BadRequestException('size must be "thumb" or omitted');
+    }
+
     const avatar: AvatarFileResult = await this.queryBus.execute(
-      new GetAvatarQuery(user.id),
+      new GetAvatarQuery(user.id, avatarSize === 'thumb'),
     );
 
     const headers = {
