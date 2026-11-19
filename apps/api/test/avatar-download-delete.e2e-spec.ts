@@ -7,6 +7,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
+import sharp from 'sharp';
 import { JPEG_BYTES, PNG_BYTES } from './support/avatar-fixtures.js';
 
 const PASSWORD = 'correct-horse-battery-staple';
@@ -127,6 +128,94 @@ describe('Avatar download and delete (e2e)', () => {
       .set('If-None-Match', etag)
       .expect(200);
     expect(res.headers['etag']).not.toBe(etag);
+  });
+
+  describe('thumbnail', () => {
+    const bigPng = () =>
+      sharp({
+        create: {
+          width: 600,
+          height: 300,
+          channels: 3,
+          background: { r: 200, g: 40, b: 40 },
+        },
+      })
+        .png()
+        .toBuffer();
+
+    const thumb = (token: string, etag?: string) => {
+      const req = request(server())
+        .get('/profile/avatar?size=thumb')
+        .set('Authorization', `Bearer ${token}`)
+        .buffer(true)
+        .parse((res, cb) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => cb(null, Buffer.concat(chunks)));
+        });
+      return etag ? req.set('If-None-Match', etag) : req;
+    };
+
+    it('serves a 128 px square webp with its own ETag', async () => {
+      const token = await registerUser();
+      await upload(token, await bigPng());
+
+      const res = await thumb(token).expect(200);
+      const meta = await sharp(res.body as Buffer).metadata();
+
+      expect(res.headers['content-type']).toBe('image/webp');
+      expect([meta.format, meta.width, meta.height]).toEqual([
+        'webp',
+        128,
+        128,
+      ]);
+      const full = await download(token).expect(200);
+      expect(res.headers['etag']).not.toBe(full.headers['etag']);
+      await thumb(token, res.headers['etag'] as string).expect(304);
+    });
+
+    it('removes the thumbnail together with the avatar', async () => {
+      const token = await registerUser();
+      await upload(token, await bigPng());
+      await thumb(token).expect(200);
+      expect(await readdir(dir)).toHaveLength(2);
+
+      await request(server())
+        .delete('/profile/avatar')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(204);
+
+      expect(await readdir(dir)).toEqual([]);
+    });
+
+    it('removes the old thumbnail when the avatar is replaced', async () => {
+      const token = await registerUser();
+      await upload(token, await bigPng());
+      await thumb(token).expect(200);
+
+      await upload(token, await bigPng());
+
+      expect(await readdir(dir)).toHaveLength(1);
+    });
+
+    it('falls back to the original when it cannot be resized', async () => {
+      const token = await registerUser();
+      await upload(token, PNG_BYTES);
+
+      const res = await thumb(token).expect(200);
+
+      expect(res.headers['content-type']).toBe('image/png');
+    });
+
+    it('rejects an unknown size', async () => {
+      const token = await registerUser();
+      await upload(token, PNG_BYTES);
+
+      await request(server())
+        .get('/profile/avatar?size=huge')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(400);
+    });
   });
 
   it('returns 404 when the user has no avatar', async () => {
