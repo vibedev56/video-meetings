@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { hashPassword } from '../password.js';
 import { ChangePasswordCommand } from './change-password.command.js';
@@ -46,6 +46,18 @@ describe('ChangePasswordHandler', () => {
     await expect(
       handler.execute(new ChangePasswordCommand('u1', 'wrong', NEW)),
     ).rejects.toThrow(UnauthorizedException);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('throws BadRequestException when the new password equals the old one', async () => {
+    const { handler, send } = setup({
+      id: 'u1',
+      passwordHash: await hashPassword(OLD),
+    });
+
+    await expect(
+      handler.execute(new ChangePasswordCommand('u1', OLD, OLD)),
+    ).rejects.toThrow(BadRequestException);
     expect(send).not.toHaveBeenCalled();
   });
 

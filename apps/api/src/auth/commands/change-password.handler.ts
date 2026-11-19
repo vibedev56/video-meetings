@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import {
   CommandBus,
   CommandHandler,
@@ -34,6 +34,12 @@ export class ChangePasswordHandler implements ICommandHandler<
 
     if (!user || !oldMatches) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (command.newPassword === command.oldPassword) {
+      throw new BadRequestException(
+        'New password must differ from the old password',
+      );
     }
 
     const passwordHash = await hashPassword(command.newPassword);

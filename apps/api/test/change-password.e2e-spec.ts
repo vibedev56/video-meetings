@@ -70,6 +70,55 @@ describe('POST /auth/password (e2e)', () => {
       .expect(401);
   });
 
+  it('returns 400 when the new password is shorter than 8 characters', async () => {
+    const { email, token } = await registerUser();
+
+    await request(server())
+      .post('/auth/password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ oldPassword: OLD, newPassword: 'short7!' })
+      .expect(400);
+
+    await login(email, OLD).expect(200);
+  });
+
+  it('accepts a new password of exactly 8 characters', async () => {
+    const { token } = await registerUser();
+
+    await request(server())
+      .post('/auth/password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ oldPassword: OLD, newPassword: '12345678' })
+      .expect(204);
+  });
+
+  it('returns 400 when the new password equals the old one', async () => {
+    const { email, token } = await registerUser();
+
+    await request(server())
+      .post('/auth/password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ oldPassword: OLD, newPassword: OLD })
+      .expect(400);
+
+    await login(email, OLD).expect(200);
+  });
+
+  it('keeps the current token valid after the change', async () => {
+    const { token } = await registerUser();
+
+    await request(server())
+      .post('/auth/password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ oldPassword: OLD, newPassword: NEW })
+      .expect(204);
+
+    await request(server())
+      .get('/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+  });
+
   it('returns 400 when a field is missing', async () => {
     const { token } = await registerUser();
 

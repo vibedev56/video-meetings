@@ -1,4 +1,14 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+
+const PASSWORD_MIN_LENGTH = 8;
+// bcrypt ignores everything past 72 bytes.
+const PASSWORD_MAX_LENGTH = 72;
 
 export class LoginDto {
   @IsEmail()
@@ -15,7 +25,8 @@ export class ChangePasswordDto {
   oldPassword: string;
 
   @IsString()
-  @IsNotEmpty()
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @MaxLength(PASSWORD_MAX_LENGTH)
   newPassword: string;
 }
 
@@ -24,6 +35,6 @@ export class RegisterDto {
   email: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(PASSWORD_MIN_LENGTH)
   password: string;
 }
