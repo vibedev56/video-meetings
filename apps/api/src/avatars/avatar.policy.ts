@@ -1,5 +1,8 @@
 import { extname, parse } from 'node:path';
 
+/** Side of the square thumbnail, in pixels (shown at 36 px, so 3x for HiDPI). */
+export const AVATAR_THUMBNAIL_SIZE = 128;
+
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 /** Room for multipart headers and boundaries on top of the file itself. */
