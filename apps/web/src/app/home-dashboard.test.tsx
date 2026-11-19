@@ -101,4 +101,18 @@ describe('HomeDashboard', () => {
     ).toBeTruthy();
     expect(screen.queryByText('Не удалось загрузить встречи')).toBeNull();
   });
+
+  it('shows the token email in the header while the profile loads', async () => {
+    apiMock.getProfile.mockReturnValue(new Promise(() => {}));
+
+    render(<HomeDashboard />);
+
+    expect(
+      (
+        await screen.findByRole('link', {
+          name: 'Профиль: ivan@example.com',
+        })
+      ).getAttribute('href'),
+    ).toBe('/profile');
+  });
 });

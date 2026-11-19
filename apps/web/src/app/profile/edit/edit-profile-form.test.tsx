@@ -92,7 +92,8 @@ describe('EditProfileForm', () => {
     apiMock.updateProfile.mockRejectedValue(new ApiError(400, 'bad'));
     render(<EditProfileForm />);
 
-    await findInput();
+    const input = await findInput();
+    fireEvent.change(input, { target: { value: 'Пётр' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
 
     expect(
@@ -104,7 +105,8 @@ describe('EditProfileForm', () => {
     apiMock.updateProfile.mockRejectedValue(new ApiError(500, 'boom'));
     render(<EditProfileForm />);
 
-    await findInput();
+    const input = await findInput();
+    fireEvent.change(input, { target: { value: 'Пётр' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
 
     expect(
@@ -116,7 +118,8 @@ describe('EditProfileForm', () => {
     apiMock.updateProfile.mockRejectedValue(new ApiError(401, 'Unauthorized'));
     render(<EditProfileForm />);
 
-    await findInput();
+    const input = await findInput();
+    fireEvent.change(input, { target: { value: 'Пётр' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
 
     await waitFor(() =>
@@ -166,7 +169,8 @@ describe('EditProfileForm', () => {
     apiMock.updateProfile.mockRejectedValue(new ApiError(0, 'network'));
     render(<EditProfileForm />);
 
-    await findInput();
+    const input = await findInput();
+    fireEvent.change(input, { target: { value: 'Пётр' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
 
     expect(
@@ -191,6 +195,94 @@ describe('EditProfileForm', () => {
     apiMock.getProfile.mockRejectedValue(new ApiError(401, 'Unauthorized'));
 
     render(<EditProfileForm />);
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'),
+    );
+    expect(localStorage.getItem('accessToken')).toBeNull();
+  });
+
+  it('accepts a name of exactly 100 characters', async () => {
+    apiMock.updateProfile.mockResolvedValue({
+      ...profile,
+      name: 'а'.repeat(100),
+    });
+    render(<EditProfileForm />);
+
+    const input = await findInput();
+    fireEvent.change(input, { target: { value: 'а'.repeat(100) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(await screen.findByText('Имя сохранено')).toBeTruthy();
+    expect(apiMock.updateProfile).toHaveBeenCalledWith(
+      'token-123',
+      'а'.repeat(100),
+    );
+  });
+
+  it('keeps the save button disabled until the name is changed', async () => {
+    render(<EditProfileForm />);
+
+    const input = await findInput();
+    const button = screen.getByRole('button', {
+      name: 'Сохранить',
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+
+    fireEvent.change(input, { target: { value: 'Пётр' } });
+    expect(button.disabled).toBe(false);
+
+    fireEvent.change(input, { target: { value: 'Иван ' } });
+    expect(button.disabled).toBe(true);
+  });
+
+  it('links back to the profile after saving', async () => {
+    apiMock.updateProfile.mockResolvedValue({ ...profile, name: 'Пётр' });
+    render(<EditProfileForm />);
+
+    const input = await findInput();
+    fireEvent.change(input, { target: { value: 'Пётр' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    const link = await screen.findByRole('link', {
+      name: 'Вернуться в профиль',
+    });
+    expect(link.getAttribute('href')).toBe('/profile');
+  });
+
+  it('updates the name in the header after saving', async () => {
+    apiMock.updateProfile.mockResolvedValue({ ...profile, name: 'Пётр' });
+    render(<EditProfileForm />);
+
+    const input = await findInput();
+    expect(screen.getByRole('link', { name: 'Профиль: Иван' })).toBeTruthy();
+    fireEvent.change(input, { target: { value: 'Пётр' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(
+      await screen.findByRole('link', { name: 'Профиль: Пётр' }),
+    ).toBeTruthy();
+    expect(apiMock.getProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('redirects to login on 404 when loading the profile', async () => {
+    apiMock.getProfile.mockRejectedValue(new ApiError(404, 'Not found'));
+
+    render(<EditProfileForm />);
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'),
+    );
+    expect(localStorage.getItem('accessToken')).toBeNull();
+  });
+
+  it('redirects to login on 404 when saving', async () => {
+    apiMock.updateProfile.mockRejectedValue(new ApiError(404, 'Not found'));
+    render(<EditProfileForm />);
+
+    const input = await findInput();
+    fireEvent.change(input, { target: { value: 'Пётр' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
 
     await waitFor(() =>
       expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'),

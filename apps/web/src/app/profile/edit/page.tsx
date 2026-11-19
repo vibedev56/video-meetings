@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { EditProfileForm } from './edit-profile-form';
 
 export const metadata: Metadata = {
-  title: 'Изменить имя | Видеовстречи',
-  description: 'Измените имя, которое видно в вашем профиле.',
+  title: 'Редактирование профиля | Видеовстречи',
+  description: 'Измените данные вашего профиля.',
 };
 
 export default function EditProfilePage() {

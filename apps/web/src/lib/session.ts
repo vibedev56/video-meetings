@@ -45,6 +45,38 @@ export function redirectToLoginIfUnauthorized(
 }
 
 /**
+ * Returns the stored access token. Without one, clears any leftovers, sends the
+ * user to the login page and returns null, so the caller can stop.
+ */
+export function requireAccessToken(router: {
+  replace: (href: string) => void;
+}): string | null {
+  const token = getAccessToken();
+  if (!token) {
+    clearAccessToken();
+    router.replace('/auth/login');
+  }
+  return token;
+}
+
+/**
+ * Like `redirectToLoginIfUnauthorized`, but for requests about the user's own
+ * profile: a 404 there means the user was deleted while the token is still
+ * valid, so retrying cannot help and the user has to log in again.
+ */
+export function redirectToLoginIfSessionInvalid(
+  error: unknown,
+  router: { replace: (href: string) => void },
+): boolean {
+  if (!hasStatus(error, 401) && !hasStatus(error, 404)) {
+    return false;
+  }
+  clearAccessToken();
+  router.replace('/auth/login');
+  return true;
+}
+
+/**
  * Reads the `email` claim from the JWT payload for display only. The signature
  * is not checked here: the API verifies the token on every protected request.
  * Returns null when the token is malformed.

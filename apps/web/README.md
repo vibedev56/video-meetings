@@ -22,7 +22,7 @@ Pages (the profile pages need a logged-in user):
 | ---------------- | ---------------------------------------------- |
 | `/`              | Home: recent meetings, user name in the header |
 | `/profile`       | Profile: name, email and initials              |
-| `/profile/edit`  | Edit the display name                          |
+| `/profile/edit`  | Edit the profile (display name)                |
 | `/meetings/[id]` | Meeting details and files                      |
 
 If the API does not run on `http://localhost:3000` (it defaults to port 3000, the same as Next.js), start Next on another port and point the web app at the API:

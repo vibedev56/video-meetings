@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api';
 import { ProfileView } from './profile-view';
@@ -53,7 +59,9 @@ describe('ProfileView', () => {
 
     render(<ProfileView />);
 
-    const link = await screen.findByRole('link', { name: 'Изменить имя' });
+    const link = await screen.findByRole('link', {
+      name: 'Редактировать профиль',
+    });
     expect(link.getAttribute('href')).toBe('/profile/edit');
   });
 
@@ -103,5 +111,49 @@ describe('ProfileView', () => {
       await screen.findByText('Не удалось загрузить профиль'),
     ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
+  });
+
+  it('redirects to login on 404 (the user no longer exists)', async () => {
+    apiMock.getProfile.mockRejectedValue(new ApiError(404, 'Not found'));
+
+    render(<ProfileView />);
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'),
+    );
+    expect(localStorage.getItem('accessToken')).toBeNull();
+    expect(screen.queryByText('Не удалось загрузить профиль')).toBeNull();
+  });
+
+  it('has a logout button in the header', async () => {
+    apiMock.getProfile.mockResolvedValue({
+      name: 'Иван',
+      email: 'ivan@example.com',
+      hasAvatar: false,
+    });
+
+    render(<ProfileView />);
+
+    await screen.findByRole('heading', { name: 'Иван' });
+    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
+
+    expect(localStorage.getItem('accessToken')).toBeNull();
+    expect(routerMock.replace).toHaveBeenCalledWith('/auth/login');
+  });
+
+  it('describes the profile link in the header with the name', async () => {
+    apiMock.getProfile.mockResolvedValue({
+      name: 'Иван',
+      email: 'ivan@example.com',
+      hasAvatar: false,
+    });
+
+    render(<ProfileView />);
+
+    expect(
+      (await screen.findByRole('link', { name: 'Профиль: Иван' })).getAttribute(
+        'href',
+      ),
+    ).toBe('/profile');
   });
 });
