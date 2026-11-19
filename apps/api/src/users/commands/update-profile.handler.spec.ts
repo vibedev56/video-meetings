@@ -10,8 +10,8 @@ describe('UpdateProfileHandler', () => {
     return new UpdateProfileHandler(prisma);
   };
 
-  const ok = (name: string | null) =>
-    vi.fn().mockResolvedValue({ email: 'a@b.c', name });
+  const ok = (name: string | null, avatarFile: string | null = null) =>
+    vi.fn().mockResolvedValue({ email: 'a@b.c', name, avatarFile });
 
   it('trims the name and updates only the given user', async () => {
     const update = ok('Анна');
@@ -23,6 +23,14 @@ describe('UpdateProfileHandler', () => {
       expect.objectContaining({ where: { id: 'u1' }, data: { name: 'Анна' } }),
     );
     expect(result).toEqual({ email: 'a@b.c', name: 'Анна', hasAvatar: false });
+  });
+
+  it('reports hasAvatar when an avatar file is stored', async () => {
+    const result = await setup(ok('Анна', 'x.png')).execute(
+      new UpdateProfileCommand('u1', 'Анна'),
+    );
+
+    expect(result.hasAvatar).toBe(true);
   });
 
   it.each(['', '   ', '\t\n'])('resets the name for %j', async (input) => {

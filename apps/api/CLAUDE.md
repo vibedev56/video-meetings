@@ -47,6 +47,14 @@ Modules:
   - `content-disposition.ts` - `buildAttachmentDisposition()` builds the `attachment` header with an ASCII fallback and `filename*` for non-ASCII names.
   - `meeting-files.controller.ts` - `POST /meetings/:id/files` (201; field `file`), `GET /meetings/:id/files`, `GET /meetings/:id/files/:fileId` (streamed download) and `DELETE /meetings/:id/files/:fileId` (204). All need `Authorization: Bearer <token>`.
 
+- `src/avatars/` - `AvatarsModule`, built on CQRS. Uploads go to `AVATARS_DIR` through multer (`diskStorage`, generated file names); the file name is stored in `User.avatarFile`:
+  - `avatar.policy.ts` - pure rules: jpg/jpeg/png/webp extension and MIME pairs, 2 MB limit. Unit-tested in `avatar.policy.spec.ts`.
+  - `avatars.config.ts` - reads `AVATARS_DIR`. `AvatarsModule` creates the directory on startup.
+  - `max-avatar-content-length.interceptor.ts` - 413 from the `Content-Length` header before multer reads the body.
+  - `commands/` - `UploadAvatarCommand` and its handler. Locks the user row (`FOR UPDATE`), saves the new name, then removes the previous file; removes the new file if anything fails.
+  - `avatar.storage.ts` - `AvatarStorage` maps stored names to paths and removes files. Missing files are ignored.
+  - `avatars.controller.ts` - `PUT /profile/avatar` (200; field `file`; returns `{ hasAvatar: true }`), guarded by `JwtAuthGuard`. `hasAvatar` in the profile is `avatarFile !== null`.
+
 CQRS (`@nestjs/cqrs`) conventions for new features. The full description is in `README.md` under "CQRS".
 
 - State-changing operations go in `commands/` and reads go in `queries/`. Each is a `*.command.ts` / `*.query.ts` class with `readonly` constructor parameters, plus a `*.handler.ts` decorated with `@CommandHandler` / `@QueryHandler`.
@@ -63,6 +71,7 @@ Environment (`apps/api/.env`, see `.env.example`):
 - `JWT_EXPIRES_IN` - token lifetime (default `1h`).
 - `PORT` - HTTP port (default `3000`).
 - `MEETING_FILES_DIR` - directory for uploaded meeting files (default `./storage/meeting-files`, git-ignored). Created on startup.
+- `AVATARS_DIR` - directory for user avatars (default `./storage/avatars`). Created on startup.
 
 ## Commands
 
@@ -77,7 +86,7 @@ Run from `apps/api` or from the repo root with `pnpm --filter api <script>`:
 Test suites (details in `README.md` under "Tests"):
 
 - Unit: `src/meeting-files/*.spec.ts` (policy, storage cleanup, `Content-Disposition`) and `src/users/**/*-profile.handler.spec.ts` (profile handlers with a mocked Prisma), `src/auth/password.spec.ts` and `src/auth/commands/change-password.handler.spec.ts` (hash helpers, password change rules). No database needed.
-- E2E: `test/auth.e2e-spec.ts` (register and login), `test/change-password.e2e-spec.ts` (password change), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload, list, download, delete, and meeting delete). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
+- E2E: `test/auth.e2e-spec.ts` (register and login), `test/change-password.e2e-spec.ts` (password change), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload, list, download, delete, and meeting delete), `test/avatar-upload.e2e-spec.ts` (avatar upload, replacement, rejection; `AVATARS_DIR` is a temporary directory per test). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
 - The auth e2e tests check only the token's shape, not its signature. `JWT_SECRET` is loaded from `.env` by `ConfigModule`, so a test could verify the signature if it needs to.
 - `pnpm lint` - `oxlint --type-aware src/ test/`
 - `pnpm format` - Prettier over `src/` and `test/`

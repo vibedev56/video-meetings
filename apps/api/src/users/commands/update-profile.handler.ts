@@ -20,14 +20,13 @@ export class UpdateProfileHandler implements ICommandHandler<
       const user = await this.prisma.user.update({
         where: { id: command.userId },
         data: { name },
-        select: { email: true, name: true },
+        select: { email: true, name: true, avatarFile: true },
       });
 
       return {
         email: user.email,
         name: user.name,
-        // Avatars are added in a later phase; no user has one yet.
-        hasAvatar: false,
+        hasAvatar: user.avatarFile !== null,
       };
     } catch (error) {
       // P2025: the record to update does not exist (for example a deleted user).

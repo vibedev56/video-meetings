@@ -4,8 +4,16 @@ import { GetProfileHandler } from './get-profile.handler.js';
 import { GetProfileQuery } from './get-profile.query.js';
 
 describe('GetProfileHandler', () => {
-  const setup = (user: { email: string; name: string | null } | null) => {
-    const findUnique = vi.fn().mockResolvedValue(user);
+  const setup = (
+    user: {
+      email: string;
+      name: string | null;
+      avatarFile?: string | null;
+    } | null,
+  ) => {
+    const findUnique = vi
+      .fn()
+      .mockResolvedValue(user && { avatarFile: null, ...user });
     const prisma = { user: { findUnique } } as unknown as PrismaService;
     return { handler: new GetProfileHandler(prisma), findUnique };
   };
@@ -21,6 +29,17 @@ describe('GetProfileHandler', () => {
     expect(findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'u1' } }),
     );
+  });
+
+  it('reports hasAvatar when an avatar file is stored', async () => {
+    const { handler } = setup({
+      email: 'a@b.c',
+      name: null,
+      avatarFile: 'x.png',
+    });
+
+    const result = await handler.execute(new GetProfileQuery('u1'));
+    expect(result.hasAvatar).toBe(true);
   });
 
   it('returns a null name when it is not set', async () => {
