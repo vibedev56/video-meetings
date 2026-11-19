@@ -95,4 +95,97 @@ describe('Profile (e2e)', () => {
       expect(res.body.email).not.toBe(first.email);
     });
   });
+
+  describe('PATCH /profile', () => {
+    const patch = (token: string, body: object) =>
+      request(server())
+        .patch('/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send(body);
+
+    const getProfile = (token: string) =>
+      request(server()).get('/profile').set('Authorization', `Bearer ${token}`);
+
+    it('saves the name and the profile returns it', async () => {
+      const { email, token } = await registerUser();
+
+      const res = await patch(token, { name: 'Анна' }).expect(200);
+      expect(res.body).toEqual({ email, name: 'Анна', hasAvatar: false });
+
+      const profile = await getProfile(token).expect(200);
+      expect(profile.body.name).toBe('Анна');
+    });
+
+    it('trims surrounding whitespace', async () => {
+      const { token } = await registerUser();
+
+      const res = await patch(token, { name: '  Анна  ' }).expect(200);
+      expect(res.body.name).toBe('Анна');
+    });
+
+    it('resets the name when it is empty', async () => {
+      const { token } = await registerUser();
+      await patch(token, { name: 'Анна' }).expect(200);
+
+      const res = await patch(token, { name: '' }).expect(200);
+      expect(res.body.name).toBeNull();
+      expect((await getProfile(token).expect(200)).body.name).toBeNull();
+    });
+
+    it('resets the name when it is only whitespace', async () => {
+      const { token } = await registerUser();
+      await patch(token, { name: 'Анна' }).expect(200);
+
+      const res = await patch(token, { name: '   ' }).expect(200);
+      expect(res.body.name).toBeNull();
+    });
+
+    it('rejects a name longer than 100 characters', async () => {
+      const { token } = await registerUser();
+
+      await patch(token, { name: 'a'.repeat(101) }).expect(400);
+      await patch(token, { name: 'a'.repeat(100) }).expect(200);
+    });
+
+    it('rejects a missing or non-string name', async () => {
+      const { token } = await registerUser();
+
+      await patch(token, {}).expect(400);
+      await patch(token, { name: 42 }).expect(400);
+    });
+
+    it('returns 401 without a token', async () => {
+      await request(server()).patch('/profile').send({ name: 'A' }).expect(401);
+    });
+
+    it("changes only the caller's own profile", async () => {
+      const first = await registerUser();
+      const second = await registerUser();
+
+      await patch(second.token, { name: 'Борис' }).expect(200);
+
+      const res = await getProfile(first.token).expect(200);
+      expect(res.body.name).toBeNull();
+    });
+
+    it('ignores an email or id sent in the body', async () => {
+      const first = await registerUser();
+      const second = await registerUser();
+
+      const res = await patch(first.token, {
+        name: 'Анна',
+        email: second.email,
+      }).expect(200);
+
+      expect(res.body.email).toBe(first.email);
+      expect((await getProfile(second.token)).body.name).toBeNull();
+    });
+
+    it('returns 404 for a valid token of a deleted user', async () => {
+      const { email, token } = await registerUser();
+      await app.get(PrismaService).user.delete({ where: { email } });
+
+      await patch(token, { name: 'Анна' }).expect(404);
+    });
+  });
 });

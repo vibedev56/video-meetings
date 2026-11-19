@@ -15,7 +15,8 @@ Modules:
   - `commands/` - `CreateUserCommand` and its handler (stores a user, returns `UserResult`, 409 on duplicate e-mail).
   - `queries/` - `FindUserByEmailQuery` and its handler (returns `UserCredentialsResult` or `null`).
   - `queries/` also has `GetProfileQuery` and its handler (returns `ProfileResult`: `email`, `name`, `hasAvatar`).
-  - `profile.controller.ts` - guarded by `JwtAuthGuard`; `GET /profile` (needs `Authorization: Bearer <token>`; 401 without it). `UsersModule` imports `AuthModule` for the guard.
+  - `commands/` also has `UpdateProfileCommand` and its handler (trims the name; an empty or whitespace-only name resets it to `null`; 404 if the user no longer exists). `dto/update-profile.dto.ts` limits the name to 100 characters.
+  - `profile.controller.ts` - guarded by `JwtAuthGuard`; `GET /profile` and `PATCH /profile` with body `{ name }` (both need `Authorization: Bearer <token>`; 401 without it; 400 for a missing, non-string or too long name). `PATCH` always changes the caller's own profile, since the id comes from the token. `UsersModule` imports `AuthModule` for the guard.
   - `user.result.ts` - `UserResult` and `UserCredentialsResult` (the latter includes `passwordHash` and is only for the auth module).
 - `src/auth/` - `AuthModule`, built on CQRS. Owns tokens and passwords. It imports only `CqrsModule` and `JwtModule`, not `UsersModule`; it talks to users via buses:
   - `commands/` - `RegisterUserCommand` and its handler (hashes the password, sends `CreateUserCommand`, returns `{ accessToken }`).

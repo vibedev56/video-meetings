@@ -67,6 +67,7 @@ $ pnpm dev:api              # from the repo root; or `pnpm start:dev` here
 Meeting endpoints need `Authorization: Bearer <accessToken>`; without a valid token they return 401.
 
 - `GET /profile` - returns `{ "email", "name", "hasAvatar" }` for the current user (`name` is `null` until set; `hasAvatar` is `false` until avatars exist). Needs a Bearer token; returns 401 without one.
+- `PATCH /profile` - body `{ "name": "Анна" }`; saves the name of the current user and returns the same shape as `GET /profile`. The name is trimmed; an empty or whitespace-only name resets it to `null`. Returns 400 if `name` is missing, not a string, or longer than 100 characters, and 401 without a token. Only the caller's own profile can be changed.
 - `POST /meetings` - body `{ "title", "date", "participants" }`, where `date` is an ISO 8601 date-time and `participants` is an array of e-mails. Creates a meeting owned by the current user and returns it with status 201.
 - `GET /meetings` - returns the current user's meetings, ordered by date.
 - `GET /meetings/:id` - returns one meeting. Returns 404 if it does not exist or belongs to another user.
