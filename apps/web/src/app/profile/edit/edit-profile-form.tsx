@@ -17,6 +17,7 @@ import { useState, type SyntheticEvent } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { LoadError } from '@/components/load-error';
 import { PageSpinner } from '@/components/page-spinner';
+import { AvatarSection } from './avatar-section';
 import {
   ApiError,
   changePassword,
@@ -61,6 +62,7 @@ export function EditProfileForm() {
         <LoadError title="Не удалось загрузить профиль" onRetry={reload} />
       )}
       {state.status === 'ready' && <NameSection profile={state.profile} />}
+      {state.status === 'ready' && <AvatarSection profile={state.profile} />}
       {state.status === 'ready' && <PasswordSection />}
     </AppShell>
   );
