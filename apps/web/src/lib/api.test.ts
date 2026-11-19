@@ -5,6 +5,7 @@ import {
   deleteMeetingFile,
   downloadMeetingFile,
   listMeetingFiles,
+  deleteAvatar,
   listMeetings,
   parseContentDispositionFileName,
   updateProfile,
@@ -256,6 +257,28 @@ describe('uploadAvatar', () => {
     );
 
     expect(error).toMatchObject({ status: 0 });
+  });
+});
+
+describe('deleteAvatar', () => {
+  it('sends DELETE /profile/avatar with the Bearer token', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(deleteAvatar(TOKEN)).resolves.toBeNull();
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/profile/avatar');
+    expect(init.method).toBe('DELETE');
+    expect(init.headers).toEqual({ Authorization: `Bearer ${TOKEN}` });
+  });
+
+  it('rejects with the API status', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'nope' }, 500));
+
+    const error = await deleteAvatar(TOKEN).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 500 });
   });
 });
 

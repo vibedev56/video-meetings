@@ -153,6 +153,14 @@ export function uploadAvatar(token: string, file: File) {
   });
 }
 
+/** `DELETE /profile/avatar`. Resolves with `null` (204). */
+export function deleteAvatar(token: string) {
+  return apiRequest<null>('/profile/avatar', {
+    method: 'DELETE',
+    headers: authorization(token),
+  });
+}
+
 /**
  * `POST /auth/password`. Resolves with `null` (204). Rejects with 401 and the
  * message `Invalid credentials` for a wrong old password, with 400 for a weak

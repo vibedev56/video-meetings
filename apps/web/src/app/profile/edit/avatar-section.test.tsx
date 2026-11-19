@@ -17,6 +17,7 @@ import { EditProfileForm } from './edit-profile-form';
 const apiMock = vi.hoisted(() => ({
   getProfile: vi.fn(),
   uploadAvatar: vi.fn(),
+  deleteAvatar: vi.fn(),
 }));
 const routerMock = vi.hoisted(() => ({ replace: vi.fn() }));
 
@@ -35,6 +36,7 @@ beforeEach(() => {
   localStorage.setItem('accessToken', 'token-123');
   apiMock.getProfile.mockReset();
   apiMock.uploadAvatar.mockReset();
+  apiMock.deleteAvatar.mockReset();
   routerMock.replace.mockReset();
   apiMock.getProfile.mockResolvedValue(profile);
 });
@@ -159,5 +161,89 @@ describe('avatar section', () => {
     render(<EditProfileForm />);
     await findFileInput();
     expect(apiMock.getProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe('avatar deletion', () => {
+  const withAvatar = { ...profile, hasAvatar: true };
+  const deleteButton = () =>
+    screen.queryByRole('button', { name: 'Удалить аватар' });
+
+  async function clickDelete() {
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Удалить аватар' }),
+    );
+  }
+
+  it('hides the delete button when there is no avatar', async () => {
+    render(<EditProfileForm />);
+
+    await findFileInput();
+    expect(deleteButton()).toBeNull();
+  });
+
+  it('deletes the avatar and shows a success message', async () => {
+    apiMock.getProfile.mockResolvedValue(withAvatar);
+    apiMock.deleteAvatar.mockResolvedValue(null);
+    render(<EditProfileForm />);
+
+    await clickDelete();
+
+    expect(await screen.findByText('Аватар удалён')).toBeTruthy();
+    expect(apiMock.deleteAvatar).toHaveBeenCalledWith('token-123');
+    await waitFor(() => expect(deleteButton()).toBeNull());
+  });
+
+  it('offers deletion after a fresh upload', async () => {
+    apiMock.uploadAvatar.mockResolvedValue({ hasAvatar: true });
+    render(<EditProfileForm />);
+
+    pick(await findFileInput(), png());
+
+    expect(
+      await screen.findByRole('button', { name: 'Удалить аватар' }),
+    ).toBeTruthy();
+  });
+
+  it('marks the cached profile as having no avatar', async () => {
+    apiMock.getProfile.mockResolvedValue(withAvatar);
+    apiMock.deleteAvatar.mockResolvedValue(null);
+    render(<EditProfileForm />);
+    await clickDelete();
+    await screen.findByText('Аватар удалён');
+
+    cleanup();
+    apiMock.getProfile.mockClear();
+    render(<EditProfileForm />);
+    await findFileInput();
+    expect(apiMock.getProfile).not.toHaveBeenCalled();
+    expect(deleteButton()).toBeNull();
+  });
+
+  it.each([
+    [0, 'Сервер недоступен. Проверьте подключение.'],
+    [500, 'Не удалось удалить аватар. Попробуйте позже.'],
+  ])('maps delete status %i to a message', async (status, message) => {
+    apiMock.getProfile.mockResolvedValue(withAvatar);
+    apiMock.deleteAvatar.mockRejectedValue(new ApiError(status, 'err'));
+    render(<EditProfileForm />);
+
+    await clickDelete();
+
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(deleteButton()).toBeTruthy();
+  });
+
+  it('redirects to login and clears the token on 401', async () => {
+    apiMock.getProfile.mockResolvedValue(withAvatar);
+    apiMock.deleteAvatar.mockRejectedValue(new ApiError(401, 'Unauthorized'));
+    render(<EditProfileForm />);
+
+    await clickDelete();
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'),
+    );
+    expect(localStorage.getItem('accessToken')).toBeNull();
   });
 });

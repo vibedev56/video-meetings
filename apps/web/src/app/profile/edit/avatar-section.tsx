@@ -3,7 +3,7 @@
 import { Alert, Button, Card, Spinner } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type ChangeEvent } from 'react';
-import { ApiError, uploadAvatar } from '@/lib/api';
+import { ApiError, deleteAvatar, uploadAvatar } from '@/lib/api';
 import {
   ACCEPTED_AVATAR_EXTENSIONS,
   AVATAR_FILE_TOO_LARGE_MESSAGE,
@@ -33,27 +33,62 @@ function uploadErrorMessage(error: unknown): string {
   return 'Не удалось загрузить аватар. Попробуйте позже.';
 }
 
+/** Russian message for a failed delete, by the API status. */
+function deleteErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 0) {
+    return 'Сервер недоступен. Проверьте подключение.';
+  }
+  return 'Не удалось удалить аватар. Попробуйте позже.';
+}
+
 /**
  * «Аватар» section: pick a file, check it in the browser and upload it right
  * away. The shared profile cache is updated so other pages see the change.
  */
-export function AvatarSection() {
+export function AvatarSection({ hasAvatar }: { hasAvatar: boolean }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSaved, setIsSaved] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (isUploading || isDeleting) {
+      return;
+    }
+    const token = requireAccessToken(router);
+    if (!token) {
+      return;
+    }
+
+    setError(null);
+    setMessage(null);
+    setIsDeleting(true);
+    try {
+      await deleteAvatar(token);
+      patchCachedProfile({ hasAvatar: false });
+      setMessage('Аватар удалён');
+    } catch (caught) {
+      if (redirectToLoginIfUnauthorized(caught, router)) {
+        return;
+      }
+      setError(deleteErrorMessage(caught));
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   async function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
     const file = input.files?.[0];
     // Reset so choosing the same file again fires `change` again.
     input.value = '';
-    if (!file) {
+    if (!file || isDeleting) {
       return;
     }
 
-    setIsSaved(false);
+    setMessage(null);
     const validationError = validateAvatarFile(file);
     if (validationError) {
       setError(validationError);
@@ -70,7 +105,7 @@ export function AvatarSection() {
     try {
       await uploadAvatar(token, file);
       patchCachedProfile({ hasAvatar: true });
-      setIsSaved(true);
+      setMessage('Аватар обновлён');
     } catch (caught) {
       if (redirectToLoginIfUnauthorized(caught, router)) {
         return;
@@ -91,11 +126,11 @@ export function AvatarSection() {
       </Card.Header>
 
       <Card.Content className="flex flex-col gap-5">
-        {isSaved && (
+        {message && (
           <Alert status="success">
             <Alert.Indicator />
             <Alert.Content>
-              <Alert.Title>Аватар обновлён</Alert.Title>
+              <Alert.Title>{message}</Alert.Title>
             </Alert.Content>
           </Alert>
         )}
@@ -116,14 +151,15 @@ export function AvatarSection() {
           className="sr-only"
           tabIndex={-1}
           onChange={handleChange}
-          disabled={isUploading}
+          disabled={isUploading || isDeleting}
         />
       </Card.Content>
 
-      <Card.Footer>
+      <Card.Footer className="flex flex-wrap gap-3">
         <Button
           size="lg"
           isPending={isUploading}
+          isDisabled={isDeleting}
           onPress={() => inputRef.current?.click()}
         >
           {({ isPending }) => (
@@ -133,6 +169,22 @@ export function AvatarSection() {
             </>
           )}
         </Button>
+        {hasAvatar && (
+          <Button
+            size="lg"
+            variant="danger-soft"
+            isPending={isDeleting}
+            isDisabled={isUploading}
+            onPress={handleDelete}
+          >
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size="sm" /> : null}
+                Удалить аватар
+              </>
+            )}
+          </Button>
+        )}
       </Card.Footer>
     </Card>
   );
