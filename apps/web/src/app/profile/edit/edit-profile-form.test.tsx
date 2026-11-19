@@ -136,6 +136,68 @@ describe('EditProfileForm', () => {
     expect(apiMock.getProfile).not.toHaveBeenCalled();
   });
 
+  it('trims surrounding spaces before saving', async () => {
+    apiMock.updateProfile.mockResolvedValue({ ...profile, name: 'Пётр' });
+    render(<EditProfileForm />);
+
+    const input = await findInput();
+    fireEvent.change(input, { target: { value: '  Пётр  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(await screen.findByText('Имя сохранено')).toBeTruthy();
+    expect(apiMock.updateProfile).toHaveBeenCalledWith('token-123', 'Пётр');
+  });
+
+  it('hides the success message after the name is edited again', async () => {
+    apiMock.updateProfile.mockResolvedValue({ ...profile, name: 'Пётр' });
+    render(<EditProfileForm />);
+
+    const input = await findInput();
+    fireEvent.change(input, { target: { value: 'Пётр' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await screen.findByText('Имя сохранено');
+
+    fireEvent.change(input, { target: { value: 'Пётр С' } });
+
+    expect(screen.queryByText('Имя сохранено')).toBeNull();
+  });
+
+  it('shows a connection error when the server is unreachable', async () => {
+    apiMock.updateProfile.mockRejectedValue(new ApiError(0, 'network'));
+    render(<EditProfileForm />);
+
+    await findInput();
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(
+      await screen.findByText('Сервер недоступен. Проверьте подключение.'),
+    ).toBeTruthy();
+  });
+
+  it('shows a load error and reloads the profile on retry', async () => {
+    apiMock.getProfile.mockRejectedValueOnce(new ApiError(500, 'boom'));
+    render(<EditProfileForm />);
+
+    expect(
+      await screen.findByText('Не удалось загрузить профиль'),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+
+    expect((await findInput()).value).toBe('Иван');
+    expect(apiMock.getProfile).toHaveBeenCalledTimes(2);
+  });
+
+  it('redirects to login on 401 when loading the profile', async () => {
+    apiMock.getProfile.mockRejectedValue(new ApiError(401, 'Unauthorized'));
+
+    render(<EditProfileForm />);
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'),
+    );
+    expect(localStorage.getItem('accessToken')).toBeNull();
+  });
+
   it('has a link back to the profile', async () => {
     render(<EditProfileForm />);
 

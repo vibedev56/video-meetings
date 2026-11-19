@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomeDashboard } from './home-dashboard';
 import { ApiError } from '@/lib/api';
@@ -76,6 +76,17 @@ describe('HomeDashboard', () => {
         .getByRole('link', { name: /ivan@example.com/ })
         .getAttribute('href'),
     ).toBe('/profile');
+  });
+
+  it('redirects to login and clears the token on 401', async () => {
+    apiMock.getProfile.mockRejectedValue(new ApiError(401, 'Unauthorized'));
+
+    render(<HomeDashboard />);
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'),
+    );
+    expect(localStorage.getItem('accessToken')).toBeNull();
   });
 
   it('falls back to the token email when the profile request fails', async () => {
