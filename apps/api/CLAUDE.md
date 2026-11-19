@@ -17,14 +17,17 @@ Modules:
   - `queries/` also has `GetProfileQuery` and its handler (returns `ProfileResult`: `email`, `name`, `hasAvatar`).
   - `commands/` also has `UpdateProfileCommand` and its handler (trims the name; an empty or whitespace-only name resets it to `null`; 404 if the user no longer exists). `dto/update-profile.dto.ts` limits the name to 100 characters.
   - `profile.controller.ts` - guarded by `JwtAuthGuard`; `GET /profile` and `PATCH /profile` with body `{ name }` (both need `Authorization: Bearer <token>`; 401 without it; 400 for a missing, non-string or too long name). `PATCH` always changes the caller's own profile, since the id comes from the token. `UsersModule` imports `AuthModule` for the guard.
+  - `commands/` also has `UpdatePasswordHashCommand` and its handler, and `queries/` has `FindUserCredentialsByIdQuery` and its handler (returns `UserCredentialsResult` or `null`). Both are used only by the auth module.
   - `user.result.ts` - `UserResult` and `UserCredentialsResult` (the latter includes `passwordHash` and is only for the auth module).
 - `src/auth/` - `AuthModule`, built on CQRS. Owns tokens and passwords. It imports only `CqrsModule` and `JwtModule`, not `UsersModule`; it talks to users via buses:
   - `commands/` - `RegisterUserCommand` and its handler (hashes the password, sends `CreateUserCommand`, returns `{ accessToken }`).
   - `queries/` - `LoginUserQuery` and its handler (sends `FindUserByEmailQuery`, checks the password, returns `{ accessToken }`).
+  - `commands/` also has `ChangePasswordCommand` and its handler: loads the caller's credentials with `FindUserCredentialsByIdQuery`, checks the old password (401 on mismatch, same message as login), rejects a new password equal to the old one (400), hashes the new one and sends `UpdatePasswordHashCommand`.
   - `auth.controller.ts` - dispatches to `CommandBus` and `QueryBus` only, with no logic of its own.
   - `auth-token.service.ts` - `AuthTokenService.issue()` signs access tokens.
   - `password.ts` - bcrypt helpers shared by the handlers.
   - Endpoints: `POST /auth/register` (201; duplicate e-mail gives 409) and `POST /auth/login` (200; wrong password and unknown e-mail both give 401).
+  - `POST /auth/password` - guarded by `JwtAuthGuard`; body `{ oldPassword, newPassword }`; 204 on success. 401 without a token or with a wrong old password; 400 if `newPassword` is shorter than 8 or longer than 72 characters, equals the old password, or either field is missing or not a string. The id comes from the token, so only the caller's own password changes. Existing tokens stay valid.
   - `jwt-auth.guard.ts` - `JwtAuthGuard` checks the `Bearer` token and sets `request.user`; `current-user.decorator.ts` - `@CurrentUser()` reads it. `AuthModule` exports both.
 - `src/meetings/` - `MeetingsModule`, built on CQRS the same way as auth:
   - `commands/` - `CreateMeetingCommand` and its handler.
@@ -73,8 +76,8 @@ Run from `apps/api` or from the repo root with `pnpm --filter api <script>`:
 
 Test suites (details in `README.md` under "Tests"):
 
-- Unit: `src/meeting-files/*.spec.ts` (policy, storage cleanup, `Content-Disposition`) and `src/users/**/*-profile.handler.spec.ts` (profile handlers with a mocked Prisma). No database needed.
-- E2E: `test/auth.e2e-spec.ts` (register and login), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload, list, download, delete, and meeting delete). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
+- Unit: `src/meeting-files/*.spec.ts` (policy, storage cleanup, `Content-Disposition`) and `src/users/**/*-profile.handler.spec.ts` (profile handlers with a mocked Prisma), `src/auth/password.spec.ts` and `src/auth/commands/change-password.handler.spec.ts` (hash helpers, password change rules). No database needed.
+- E2E: `test/auth.e2e-spec.ts` (register and login), `test/change-password.e2e-spec.ts` (password change), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload, list, download, delete, and meeting delete). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
 - The auth e2e tests check only the token's shape, not its signature. `JWT_SECRET` is loaded from `.env` by `ConfigModule`, so a test could verify the signature if it needs to.
 - `pnpm lint` - `oxlint --type-aware src/ test/`
 - `pnpm format` - Prettier over `src/` and `test/`
