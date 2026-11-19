@@ -1,0 +1,61 @@
+{
+  "commit_id": "9717317854c1ca6e4357dca68916374bbc1a6cdd",
+  "event": "COMMENT",
+  "body": "## Code review: Фаза 1 — профиль и имя\n\nЯ проверил архитектуру, безопасность, производительность и соответствие PRD/плану. Локально `pnpm --filter api lint` и `pnpm --filter api test` проходят (43/43). e2e я не запускал.\n\n### Соответствие плану (Фаза 1)\n| Задача | Статус |\n|---|---|\n| Миграция `User.name` (nullable) | ✅ |\n| `GET /profile` (email, name, hasAvatar), только с токеном | ✅ |\n| `PATCH /profile`: пустое имя сбрасывает значение, нельзя изменить чужой профиль | ✅ |\n| Unit + e2e: чтение, смена и сброс имени, 401, изоляция пользователей | ✅ |\n| Документация `apps/api/CLAUDE.md` / `README.md` | ⚠️ обновлена, но одна формулировка теперь противоречит коду, а `user-name-migration.e2e-spec.ts` не описан (см. inline) |\n\n### Итог\nБлокеров нет: id берётся только из JWT, лишние поля режутся `whitelist: true`, запросы идут точечно по PK с `select`, а тесты покрывают критерии PRD для этой фазы.\n\nДо мержа стоит решить:\n1. **Архитектура.** `UsersModule` теперь импортирует `AuthModule`. Это ломает задокументированную границу «users не знает о токенах» и создаёт риск циклической зависимости, когда в Фазе 3 auth понадобятся данные пользователя.\n2. **Валидация имени.** `MaxLength` проверяется до `trim()`. Невидимые и управляющие символы (`\\u200B`, `\\n`, `\\u0000`) проходят валидацию, а `\\u0000` ещё и даст 500 от PostgreSQL.\n\nОстальное — nit-ы и предложения (см. inline).\n\n### Производительность\nЗамечаний нет. Каждый эндпоинт делает один запрос по PK с узким `select`. `update` с перехватом P2025 избавляет от лишнего round-trip через `findUnique`.\n\n### Безопасность\n- IDOR исключён: `userId` берётся только из токена, и это покрыто e2e (`ignores an email or id sent in the body`).\n- Rate limiting на `PATCH /profile` нет, но его нет нигде в проекте. Это вне скоупа этого PR.\n- XSS: имя попадёт в шапку. React экранирует вывод, но пусть фронтенд в Фазе 2 не использует `dangerouslySetInnerHTML` и не подставляет имя в `title`/`alt` без проверки.",
+  "comments": [
+    {
+      "path": "apps/api/src/users/users.module.ts",
+      "line": 12,
+      "side": "RIGHT",
+      "body": "**[Архитектура, major]** `UsersModule` теперь импортирует `AuthModule`. До этого PR зависимость была односторонней: auth общается с users через шины, а users «does not know about tokens or passwords» (см. `apps/api/CLAUDE.md`).\n\nРиск: в Фазе 3 (смена пароля) auth-у понадобятся данные пользователя. Если кто-то добавит `UsersModule` в imports `AuthModule`, получится цикл `AuthModule ↔ UsersModule`, и придётся использовать `forwardRef`.\n\nВарианты:\n- вынести `ProfileController` в отдельный `ProfileModule` (imports: `CqrsModule`, `AuthModule`), а хендлеры оставить в `UsersModule`;\n- или вынести `JwtAuthGuard` и `JwtModule` в небольшой `AuthGuardModule`, от которого зависят и auth, и users, и meetings."
+    },
+    {
+      "path": "apps/api/CLAUDE.md",
+      "line": 14,
+      "side": "RIGHT",
+      "body": "**[Docs]** После этого PR формулировка «does not know about tokens» перестала быть правдой: `UsersModule` импортирует `AuthModule`, а `ProfileController` использует `JwtAuthGuard`. Нужно поправить текст или (лучше) архитектуру, см. комментарий в `users.module.ts`."
+    },
+    {
+      "path": "apps/api/src/users/dto/update-profile.dto.ts",
+      "line": 8,
+      "side": "RIGHT",
+      "body": "**[Валидация, minor]** Тут две проблемы.\n\n1. `MaxLength` проверяется **до** `trim()` в хендлере. Например, `' ' + 'a'.repeat(100)` получит 400, хотя после обрезки в имени ровно 100 символов. Обрезку лучше делать в DTO через `@Transform(({ value }) => typeof value === 'string' ? value.trim() : value)`. Тогда и `MaxLength` проверит уже итоговое значение, и в хендлере останется только `|| null`.\n2. Длина считается в UTF-16 code units: эмодзи и составные графемы занимают 2–11 «символов». Для пользователя это неочевидно. Это не блокер, но фронтенду в Фазе 2 стоит считать длину так же."
+    },
+    {
+      "path": "apps/api/src/users/commands/update-profile.handler.ts",
+      "line": 17,
+      "side": "RIGHT",
+      "body": "**[Безопасность и корректность, major]** `trim()` не убирает zero-width символы (`\\u200B`, `\\u2060`) и пропускает управляющие символы.\n\nЧто получится:\n- `{ \"name\": \"\\u200B\" }` сохранит «невидимое» имя. Фронтенд покажет пустоту вместо email, а PRD требует показывать email, если имя пусто.\n- `{ \"name\": \"a\\u0000b\" }` вызовет у PostgreSQL ошибку `invalid byte sequence for encoding \"UTF8\": 0x00`. Сейчас это **500**, хотя должно быть 400.\n- Через `\\n` и bidi-override (`\\u202E`) в имени можно подделать отображение в шапке.\n\nПредлагаю запретить управляющие и format-символы в DTO, например через `@Matches(/^[^\\p{Cc}\\p{Cf}]*$/u)` (или вырезать их в `@Transform`), и добавить e2e-кейсы для `\\u0000` и `\\u200B`."
+    },
+    {
+      "path": "apps/api/prisma/schema.prisma",
+      "line": 14,
+      "side": "RIGHT",
+      "body": "**[Defense in depth, nit]** Лимит в 100 символов есть только в DTO, а колонка имеет тип `TEXT` без ограничения. Можно использовать `name String? @db.VarChar(100)`. Тогда запись в обход API (сиды, скрипты, будущие эндпоинты) не сохранит мусор, а схема сама будет документировать ограничение. Миграция ещё не попала в `main`, так что сейчас это сделать дешевле всего."
+    },
+    {
+      "path": "apps/api/src/users/commands/update-profile.handler.ts",
+      "line": 29,
+      "side": "RIGHT",
+      "body": "**[Дублирование, nit]** Маппинг `{ email, name, hasAvatar: false }` и комментарий про аватары почти дословно повторяются в `GetProfileHandler`. В Фазе 5 `hasAvatar` станет проверкой поля аватара, и менять придётся оба места. Предлагаю вынести в `user.result.ts` общий `PROFILE_SELECT` и функцию `toProfileResult(user)`."
+    },
+    {
+      "path": "apps/api/src/users/queries/get-profile.handler.ts",
+      "line": 21,
+      "side": "RIGHT",
+      "body": "**[API-семантика, question]** Если токен валиден, а пользователь удалён, сейчас возвращается 404. С точки зрения клиента это скорее 401: сессия больше не соответствует аккаунту, и фронтенд должен разлогинить и отправить на вход. Иначе в Фазе 2 придётся отдельно обрабатывать 404 на `/profile` как «выйти». Здесь подойдут оба варианта, но поведение нужно явно согласовать с фронтендом и записать в README."
+    },
+    {
+      "path": "apps/api/src/users/profile.controller.ts",
+      "line": 26,
+      "side": "RIGHT",
+      "body": "**[API-дизайн, nit]** У `PATCH` поле `name` обязательное, так что по сути это `PUT` одного поля. Сейчас это нормально: аватар и пароль по PRD будут отдельными эндпоинтами. Но если потом в профиль добавятся ещё поля, обязательный `name` в PATCH-DTO заставит клиент всегда его передавать. Можно уже сейчас сделать `@IsOptional()` и обновлять только переданные поля, или явно задокументировать, что `PATCH /profile` меняет только имя."
+    },
+    {
+      "path": "apps/api/test/user-name-migration.e2e-spec.ts",
+      "line": 24,
+      "side": "RIGHT",
+      "body": "**[Тесты, nit]** Этот набор тестирует Prisma Client, а не наш код: то, что nullable-колонка принимает `null`, гарантирует схема, а сохранение имени уже покрыто в `profile.e2e-spec.ts` через API. Плюс он поднимает целый `AppModule` ради двух `prisma.user.create`. Предлагаю удалить файл. Если его оставить, его нужно добавить в таблицу e2e-тестов в `README.md` и в `CLAUDE.md`: сейчас его там нет."
+    }
+  ]
+}

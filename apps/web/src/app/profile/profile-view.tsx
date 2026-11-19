@@ -6,7 +6,8 @@ import { AppShell } from '@/components/app-shell';
 import { LoadError } from '@/components/load-error';
 import { PageSpinner } from '@/components/page-spinner';
 import type { ProfileResponse } from '@/lib/api';
-import { displayName, getInitials } from '@/lib/profile';
+import { UserAvatar } from '@/components/user-avatar';
+import { displayName } from '@/lib/profile';
 import { useProfile } from '@/lib/use-profile';
 
 export function ProfileView() {
@@ -27,12 +28,7 @@ function ProfileCard({ profile }: { profile: ProfileResponse }) {
   return (
     <Card>
       <Card.Content className="flex items-center gap-4">
-        <div
-          aria-hidden
-          className="flex size-16 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xl font-semibold text-white"
-        >
-          {getInitials(profile)}
-        </div>
+        <UserAvatar profile={profile} size="lg" />
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight break-words text-zinc-950 dark:text-zinc-50">
             {displayName(profile)}

@@ -73,7 +73,9 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
   const response = await sendRequest(path, {
     ...init,
     headers: {
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(typeof init.body === 'string'
+        ? { 'Content-Type': 'application/json' }
+        : {}),
       ...init.headers,
     },
   });
@@ -131,6 +133,48 @@ export function updateProfile(token: string, name: string) {
   return apiRequest<ProfileResponse>('/profile', {
     method: 'PATCH',
     body: JSON.stringify({ name }),
+    headers: authorization(token),
+  });
+}
+
+/**
+ * `PUT /profile/avatar` (multipart field `file`). Replaces the current avatar.
+ * Rejects with the API status (for example 400 for a bad format, 413 for a
+ * file that is too large).
+ */
+export function uploadAvatar(token: string, file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  // No JSON content type: the browser sets the multipart boundary itself.
+  return apiRequest<{ hasAvatar: true }>('/profile/avatar', {
+    method: 'PUT',
+    body: formData,
+    headers: authorization(token),
+  });
+}
+
+/**
+ * `GET /profile/avatar`. Resolves with the image; `'thumb'` asks for the small
+ * 128 px webp (`?size=thumb`). Rejects with 404 when there is no avatar.
+ */
+export async function getAvatar(token: string, size?: 'thumb'): Promise<Blob> {
+  const response = await sendRequest(
+    size ? `/profile/avatar?size=${size}` : '/profile/avatar',
+    {
+      method: 'GET',
+      headers: authorization(token),
+    },
+  );
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+  return response.blob();
+}
+
+/** `DELETE /profile/avatar`. Resolves with `null` (204). */
+export function deleteAvatar(token: string) {
+  return apiRequest<null>('/profile/avatar', {
+    method: 'DELETE',
     headers: authorization(token),
   });
 }

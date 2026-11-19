@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { getProfile, type ProfileResponse } from './api';
 import { displayName } from './profile';
+import { clearAvatarCache } from './use-avatar';
 import {
   getAccessToken,
   getEmailFromToken,
@@ -74,8 +75,20 @@ export function setCachedProfile(profile: ProfileResponse) {
   }
 }
 
-/** Drops the cached profile, for example on logout. */
+/** Changes fields of the cached profile, keeping the rest as they are now. */
+export function patchCachedProfile(patch: Partial<ProfileResponse>) {
+  if (cache && cache.token === getAccessToken()) {
+    cache = { token: cache.token, profile: { ...cache.profile, ...patch } };
+    emit();
+  }
+}
+
+/**
+ * Drops the cached profile, for example on logout. Also drops the cached
+ * avatar (`clearAvatarCache`), so the two never go out of step.
+ */
 export function clearProfileCache() {
+  clearAvatarCache();
   cache = null;
   inflight = null;
   emit();

@@ -5,9 +5,12 @@ import {
   deleteMeetingFile,
   downloadMeetingFile,
   listMeetingFiles,
+  deleteAvatar,
+  getAvatar,
   listMeetings,
   parseContentDispositionFileName,
   updateProfile,
+  uploadAvatar,
 } from './api';
 
 const TOKEN = 'token-123';
@@ -217,6 +220,94 @@ describe('changePassword', () => {
       status: 401,
       message: 'Invalid credentials',
     });
+  });
+});
+
+describe('uploadAvatar', () => {
+  it('sends PUT /profile/avatar with the file in the "file" field', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ hasAvatar: true }));
+    const file = new File(['x'], 'me.png', { type: 'image/png' });
+
+    await expect(uploadAvatar(TOKEN, file)).resolves.toEqual({
+      hasAvatar: true,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/profile/avatar');
+    expect(init.method).toBe('PUT');
+    expect(init.headers).toEqual({ Authorization: `Bearer ${TOKEN}` });
+    expect((init.body as FormData).get('file')).toBeInstanceOf(File);
+  });
+
+  it('rejects with the API status and message', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'bad type' }, 400));
+
+    const error = await uploadAvatar(TOKEN, new File(['x'], 'a.png')).catch(
+      (e) => e,
+    );
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 400, message: 'bad type' });
+  });
+
+  it('rejects with status 0 on a network failure', async () => {
+    fetchMock.mockRejectedValue(new TypeError('failed'));
+
+    const error = await uploadAvatar(TOKEN, new File(['x'], 'a.png')).catch(
+      (e) => e,
+    );
+
+    expect(error).toMatchObject({ status: 0 });
+  });
+});
+
+describe('deleteAvatar', () => {
+  it('sends DELETE /profile/avatar with the Bearer token', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(deleteAvatar(TOKEN)).resolves.toBeNull();
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/profile/avatar');
+    expect(init.method).toBe('DELETE');
+    expect(init.headers).toEqual({ Authorization: `Bearer ${TOKEN}` });
+  });
+
+  it('rejects with the API status', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'nope' }, 500));
+
+    const error = await deleteAvatar(TOKEN).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 500 });
+  });
+});
+
+describe('getAvatar', () => {
+  it('sends GET /profile/avatar with the Bearer token and returns a Blob', async () => {
+    fetchMock.mockResolvedValue(
+      new Response('img', {
+        status: 200,
+        headers: { 'Content-Type': 'image/png' },
+      }),
+    );
+
+    const blob = await getAvatar(TOKEN);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/profile/avatar');
+    expect(init.method).toBe('GET');
+    expect(init.headers).toEqual({ Authorization: `Bearer ${TOKEN}` });
+    expect(await blob.text()).toBe('img');
+  });
+
+  it('rejects with the API status', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'nope' }, 404));
+
+    const error = await getAvatar(TOKEN).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 404 });
   });
 });
 
