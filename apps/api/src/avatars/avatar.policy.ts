@@ -16,6 +16,14 @@ const ALLOWED_TYPES = new Map<string, readonly string[]>([
   ['.webp', ['image/webp']],
 ]);
 
+/** MIME type to serve for a stored avatar, derived from its extension. */
+export function avatarMimeType(storedName: string): string {
+  return (
+    ALLOWED_TYPES.get(extname(storedName).toLowerCase())?.[0] ??
+    'application/octet-stream'
+  );
+}
+
 export function isAllowedAvatarType(
   originalName: string,
   mimeType: string,

@@ -15,7 +15,9 @@ import {
 import { AvatarStorage } from './avatar.storage.js';
 import { getAvatarsDir } from './avatars.config.js';
 import { AvatarsController } from './avatars.controller.js';
+import { DeleteAvatarHandler } from './commands/delete-avatar.handler.js';
 import { UploadAvatarHandler } from './commands/upload-avatar.handler.js';
+import { GetAvatarHandler } from './queries/get-avatar.handler.js';
 
 @Module({
   imports: [
@@ -58,7 +60,12 @@ import { UploadAvatarHandler } from './commands/upload-avatar.handler.js';
     }),
   ],
   controllers: [AvatarsController],
-  providers: [UploadAvatarHandler, AvatarStorage],
+  providers: [
+    UploadAvatarHandler,
+    DeleteAvatarHandler,
+    GetAvatarHandler,
+    AvatarStorage,
+  ],
   exports: [AvatarStorage],
 })
 export class AvatarsModule implements OnModuleInit {

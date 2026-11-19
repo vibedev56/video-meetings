@@ -1,8 +1,21 @@
 import {
+  avatarMimeType,
   isAllowedAvatarType,
   MAX_AVATAR_BYTES,
   MAX_AVATAR_REQUEST_BYTES,
 } from './avatar.policy.js';
+
+describe('avatarMimeType', () => {
+  it.each([
+    ['a.jpg', 'image/jpeg'],
+    ['a.jpeg', 'image/jpeg'],
+    ['a.PNG', 'image/png'],
+    ['a.webp', 'image/webp'],
+    ['a.bin', 'application/octet-stream'],
+  ])('maps %s to %s', (name, type) => {
+    expect(avatarMimeType(name)).toBe(type);
+  });
+});
 
 describe('isAllowedAvatarType', () => {
   it.each([
