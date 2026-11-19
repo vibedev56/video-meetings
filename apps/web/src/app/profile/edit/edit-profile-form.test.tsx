@@ -359,6 +359,39 @@ describe('EditProfileForm', () => {
       expect(button.disabled).toBe(false);
     });
 
+    it('keeps the session on a wrong old password', async () => {
+      apiMock.changePassword.mockRejectedValue(
+        new ApiError(401, 'Invalid credentials'),
+      );
+      render(<EditProfileForm />);
+
+      const { oldPassword, newPassword } = await findPasswordFields();
+      fireEvent.change(oldPassword, { target: { value: 'wrong-password' } });
+      fireEvent.change(newPassword, { target: { value: 'new-password' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Сменить пароль' }));
+
+      await waitFor(() => expect(apiMock.changePassword).toHaveBeenCalled());
+      expect(routerMock.replace).not.toHaveBeenCalled();
+      expect(localStorage.getItem('accessToken')).toBe('token-123');
+    });
+
+    it('redirects to login when the session has expired', async () => {
+      apiMock.changePassword.mockRejectedValue(
+        new ApiError(401, 'Unauthorized'),
+      );
+      render(<EditProfileForm />);
+
+      const { oldPassword, newPassword } = await findPasswordFields();
+      fireEvent.change(oldPassword, { target: { value: 'old-password' } });
+      fireEvent.change(newPassword, { target: { value: 'new-password' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Сменить пароль' }));
+
+      await waitFor(() =>
+        expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'),
+      );
+      expect(localStorage.getItem('accessToken')).toBeNull();
+    });
+
     it('clears both fields after a successful change and keeps the session', async () => {
       apiMock.changePassword.mockResolvedValue(null);
       render(<EditProfileForm />);

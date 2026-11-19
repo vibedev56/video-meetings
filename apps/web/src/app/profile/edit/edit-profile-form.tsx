@@ -24,8 +24,8 @@ import {
   type ProfileResponse,
 } from '@/lib/api';
 import {
-  clearAccessToken,
   redirectToLoginIfSessionInvalid,
+  redirectToLoginIfUnauthorized,
   requireAccessToken,
 } from '@/lib/session';
 import { setCachedProfile, useProfile } from '@/lib/use-profile';
@@ -227,13 +227,11 @@ function PasswordSection() {
       setNewPassword('');
     } catch (error) {
       // A wrong old password is not a lost session; any other 401 is.
-      if (
+      const isWrongOldPassword =
         error instanceof ApiError &&
         error.status === 401 &&
-        error.message !== WRONG_OLD_PASSWORD_MESSAGE
-      ) {
-        clearAccessToken();
-        router.replace('/auth/login');
+        error.message === WRONG_OLD_PASSWORD_MESSAGE;
+      if (!isWrongOldPassword && redirectToLoginIfUnauthorized(error, router)) {
         return;
       }
       setGeneralError('Не удалось сменить пароль. Попробуйте позже.');
