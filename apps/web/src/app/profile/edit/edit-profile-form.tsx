@@ -17,8 +17,14 @@ import { useState, type SyntheticEvent } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { LoadError } from '@/components/load-error';
 import { PageSpinner } from '@/components/page-spinner';
-import { ApiError, updateProfile, type ProfileResponse } from '@/lib/api';
 import {
+  ApiError,
+  changePassword,
+  updateProfile,
+  type ProfileResponse,
+} from '@/lib/api';
+import {
+  clearAccessToken,
   redirectToLoginIfSessionInvalid,
   requireAccessToken,
 } from '@/lib/session';
@@ -55,6 +61,7 @@ export function EditProfileForm() {
         <LoadError title="Не удалось загрузить профиль" onRetry={reload} />
       )}
       {state.status === 'ready' && <NameSection profile={state.profile} />}
+      {state.status === 'ready' && <PasswordSection />}
     </AppShell>
   );
 }
@@ -183,6 +190,120 @@ function NameSection({ profile }: { profile: ProfileResponse }) {
               <>
                 {isPending ? <Spinner color="current" size="sm" /> : null}
                 Сохранить
+              </>
+            )}
+          </Button>
+        </Card.Footer>
+      </Form>
+    </Card>
+  );
+}
+
+/** The API answers a wrong old password with 401 and this message. */
+const WRONG_OLD_PASSWORD_MESSAGE = 'Invalid credentials';
+
+function PasswordSection() {
+  const router = useRouter();
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+
+  async function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const token = requireAccessToken(router);
+    if (!token) {
+      return;
+    }
+
+    setGeneralError(null);
+    setIsSubmitting(true);
+
+    try {
+      await changePassword(token, oldPassword, newPassword);
+      // The session stays valid: the token is not touched.
+      setOldPassword('');
+      setNewPassword('');
+    } catch (error) {
+      // A wrong old password is not a lost session; any other 401 is.
+      if (
+        error instanceof ApiError &&
+        error.status === 401 &&
+        error.message !== WRONG_OLD_PASSWORD_MESSAGE
+      ) {
+        clearAccessToken();
+        router.replace('/auth/login');
+        return;
+      }
+      setGeneralError('Не удалось сменить пароль. Попробуйте позже.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <Card.Header>
+        <Card.Title className="text-2xl">Сменить пароль</Card.Title>
+        <Card.Description>
+          Введите текущий пароль и придумайте новый.
+        </Card.Description>
+      </Card.Header>
+
+      <Form
+        onSubmit={handleSubmit}
+        validationBehavior="aria"
+        className="flex flex-col gap-6"
+      >
+        <Card.Content className="flex flex-col gap-5">
+          {generalError && (
+            <Alert status="danger">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>{generalError}</Alert.Description>
+              </Alert.Content>
+            </Alert>
+          )}
+
+          <TextField
+            name="oldPassword"
+            type="password"
+            value={oldPassword}
+            onChange={setOldPassword}
+            autoComplete="current-password"
+            isDisabled={isSubmitting}
+          >
+            <Label>Старый пароль</Label>
+            <Input variant="secondary" />
+            <FieldError />
+          </TextField>
+
+          <TextField
+            name="newPassword"
+            type="password"
+            value={newPassword}
+            onChange={setNewPassword}
+            autoComplete="new-password"
+            isDisabled={isSubmitting}
+          >
+            <Label>Новый пароль</Label>
+            <Input variant="secondary" />
+            <FieldError />
+          </TextField>
+        </Card.Content>
+
+        <Card.Footer>
+          <Button
+            type="submit"
+            size="lg"
+            isPending={isSubmitting}
+            isDisabled={!oldPassword || !newPassword}
+          >
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size="sm" /> : null}
+                Сменить пароль
               </>
             )}
           </Button>

@@ -11,6 +11,7 @@ import { EditProfileForm } from './edit-profile-form';
 
 const apiMock = vi.hoisted(() => ({
   getProfile: vi.fn(),
+  changePassword: vi.fn(),
   updateProfile: vi.fn(),
 }));
 const routerMock = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -30,6 +31,7 @@ beforeEach(() => {
   localStorage.setItem('accessToken', 'token-123');
   apiMock.getProfile.mockReset();
   apiMock.updateProfile.mockReset();
+  apiMock.changePassword.mockReset();
   routerMock.replace.mockReset();
   apiMock.getProfile.mockResolvedValue(profile);
 });
@@ -296,5 +298,80 @@ describe('EditProfileForm', () => {
     await findInput();
     const link = screen.getByRole('link', { name: 'Назад к профилю' });
     expect(link.getAttribute('href')).toBe('/profile');
+  });
+
+  describe('password section', () => {
+    async function findPasswordFields() {
+      return {
+        oldPassword: (await screen.findByLabelText(
+          'Старый пароль',
+        )) as HTMLInputElement,
+        newPassword: (await screen.findByLabelText(
+          'Новый пароль',
+        )) as HTMLInputElement,
+      };
+    }
+
+    it('shows password inputs for the old and the new password', async () => {
+      render(<EditProfileForm />);
+
+      const { oldPassword, newPassword } = await findPasswordFields();
+      expect(
+        screen.getByText('Сменить пароль', { selector: 'h3' }),
+      ).toBeTruthy();
+      expect(oldPassword.type).toBe('password');
+      expect(newPassword.type).toBe('password');
+      expect(oldPassword.autocomplete).toBe('current-password');
+      expect(newPassword.autocomplete).toBe('new-password');
+    });
+
+    it('sends both passwords to the API', async () => {
+      apiMock.changePassword.mockResolvedValue(null);
+      render(<EditProfileForm />);
+
+      const { oldPassword, newPassword } = await findPasswordFields();
+      fireEvent.change(oldPassword, { target: { value: 'old-password' } });
+      fireEvent.change(newPassword, { target: { value: 'new-password' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Сменить пароль' }));
+
+      await waitFor(() =>
+        expect(apiMock.changePassword).toHaveBeenCalledWith(
+          'token-123',
+          'old-password',
+          'new-password',
+        ),
+      );
+    });
+
+    it('keeps the submit button disabled until both fields are filled', async () => {
+      render(<EditProfileForm />);
+
+      const { oldPassword, newPassword } = await findPasswordFields();
+      const button = screen.getByRole('button', {
+        name: 'Сменить пароль',
+      }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+
+      fireEvent.change(oldPassword, { target: { value: 'old-password' } });
+      expect(button.disabled).toBe(true);
+
+      fireEvent.change(newPassword, { target: { value: 'new-password' } });
+      expect(button.disabled).toBe(false);
+    });
+
+    it('clears both fields after a successful change and keeps the session', async () => {
+      apiMock.changePassword.mockResolvedValue(null);
+      render(<EditProfileForm />);
+
+      const { oldPassword, newPassword } = await findPasswordFields();
+      fireEvent.change(oldPassword, { target: { value: 'old-password' } });
+      fireEvent.change(newPassword, { target: { value: 'new-password' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Сменить пароль' }));
+
+      await waitFor(() => expect(oldPassword.value).toBe(''));
+      expect(newPassword.value).toBe('');
+      expect(routerMock.replace).not.toHaveBeenCalled();
+      expect(localStorage.getItem('accessToken')).toBe('token-123');
+    });
   });
 });
