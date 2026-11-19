@@ -4,7 +4,7 @@ const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('.claude/ralph.config.json', 'utf8'));
 
 // Сбрасываем счётчик итераций
-fs.writeFileSync('.claude/ralph.iterations.json', JSON.stringify({count: 0}));
+fs.writeFileSync('.claude/ralph.iterations.json', JSON.stringify({ count: 0 }));
 
 // Запускаем первую итерацию
 const prompt = config.prompt
