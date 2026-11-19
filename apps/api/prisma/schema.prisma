@@ -12,6 +12,7 @@ model User {
   email        String    @unique
   passwordHash String
   name         String?
+  avatarFile   String?
   createdAt    DateTime  @default(now())
   meetings     Meeting[]
 

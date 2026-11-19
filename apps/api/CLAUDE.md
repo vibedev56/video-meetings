@@ -14,7 +14,7 @@ Modules:
 - `src/users/` - `UsersModule`, built on CQRS. Owns user data and does not know about tokens or passwords:
   - `commands/` - `CreateUserCommand` and its handler (stores a user, returns `UserResult`, 409 on duplicate e-mail).
   - `queries/` - `FindUserByEmailQuery` and its handler (returns `UserCredentialsResult` or `null`).
-  - `queries/` also has `GetProfileQuery` and its handler (returns `ProfileResult`: `email`, `name`, `hasAvatar`).
+  - `queries/` also has `GetProfileQuery` and its handler (returns `ProfileResult`: `email`, `name`, `hasAvatar`, `avatarVersion`).
   - `commands/` also has `UpdateProfileCommand` and its handler (trims the name; an empty or whitespace-only name resets it to `null`; 404 if the user no longer exists). `dto/update-profile.dto.ts` limits the name to 100 characters.
   - `profile.controller.ts` - guarded by `JwtAuthGuard`; `GET /profile` and `PATCH /profile` with body `{ name }` (both need `Authorization: Bearer <token>`; 401 without it; 400 for a missing, non-string or too long name). `PATCH` always changes the caller's own profile, since the id comes from the token. `UsersModule` imports `AuthModule` for the guard.
   - `commands/` also has `UpdatePasswordHashCommand` and its handler, and `queries/` has `FindUserCredentialsByIdQuery` and its handler (returns `UserCredentialsResult` or `null`). Both are used only by the auth module.
@@ -39,13 +39,23 @@ Modules:
   - `meeting-file.policy.ts` - pure rules: extension and MIME pairs, 500 MB limit, 5 files per meeting, filename decoding. Unit-tested in `meeting-file.policy.spec.ts`.
   - `meeting-files.config.ts` - reads `MEETING_FILES_DIR`. `MeetingFilesModule` creates the directory on startup.
   - `upload-meeting-file.guard.ts` - runs before the body is read; sends `AssertCanUploadMeetingFileQuery` (404 or 409), so refused uploads never reach disk.
-  - `max-content-length.interceptor.ts` - 413 from the `Content-Length` header before multer reads the body.
+  - 413 from the `Content-Length` header comes from `createMaxContentLengthInterceptor` in `src/common/uploads/`, and the multer settings from `createUploadMulterOptions` there (shared with avatars).
   - `commands/` - `UploadMeetingFileCommand` and its handler. Locks the meeting row (`FOR UPDATE`), rechecks the count, and removes the temporary file if anything fails.
   - `queries/` - `ListMeetingFilesQuery`, `AssertCanUploadMeetingFileQuery` and `GetMeetingFileQuery` with their handlers.
   - `commands/` also has `DeleteMeetingFileCommand` and its handler (removes the row, then the file on disk).
   - `meeting-file.storage.ts` - `MeetingFileStorage` maps stored names to paths and removes files on disk. Missing files are ignored. Exported so `MeetingsModule` can use it.
   - `content-disposition.ts` - `buildAttachmentDisposition()` builds the `attachment` header with an ASCII fallback and `filename*` for non-ASCII names.
   - `meeting-files.controller.ts` - `POST /meetings/:id/files` (201; field `file`), `GET /meetings/:id/files`, `GET /meetings/:id/files/:fileId` (streamed download) and `DELETE /meetings/:id/files/:fileId` (204). All need `Authorization: Bearer <token>`.
+
+- `src/avatars/` - `AvatarsModule`, built on CQRS. Uploads go to `AVATARS_DIR` through multer (`diskStorage`, generated file names); the file name is stored in `User.avatarFile`:
+  - `avatar.policy.ts` - pure rules: jpg/jpeg/png/webp extension and MIME pairs, 2 MB limit, magic-byte signature check (`matchesAvatarSignature`) and `avatarVersion`. Unit-tested in `avatar.policy.spec.ts`.
+  - `avatars.config.ts` - reads `AVATARS_DIR`. `AvatarsModule` creates the directory on startup.
+  - 413 from the `Content-Length` header comes from the shared `createMaxContentLengthInterceptor` (`src/common/uploads/`), not a copy.
+  - `lock-user-avatar.ts` - `lockUserAvatar(tx, userId)`: the one raw `SELECT ... FOR UPDATE` on `users."avatarFile"` (physical names from `schema.prisma`), used by upload and delete.
+  - `commands/` - `UploadAvatarCommand` and its handler. First reads the file's leading bytes and checks them against its extension (400 otherwise); then locks the user row, saves the new name and removes the previous file. The new file is removed through `AvatarStorage` if anything fails.
+  - `avatar.storage.ts` - `AvatarStorage` maps stored names to paths, reads a file's head and removes files. Missing files are ignored.
+  - `commands/` also has `DeleteAvatarCommand` and its handler (locks the user row, clears `avatarFile`, then removes the file; 204 even without an avatar, 404 if the user is gone). `queries/` has `GetAvatarQuery` and its handler (returns the file path and MIME type; 404 when there is no avatar).
+  - `avatars.controller.ts` - `PUT /profile/avatar` (200; field `file`; returns `{ hasAvatar: true }`), `GET /profile/avatar` (streams the caller's own avatar with its image `Content-Type` and an `ETag`, `Content-Length`, `Content-Security-Policy: default-src 'none'; sandbox`, `nosniff` and `Content-Disposition: inline`; the `ETag` changes on every upload and equals `"<avatarVersion>"`; answers 304 to a matching `If-None-Match`; 404 without one) and `DELETE /profile/avatar` (204), guarded by `JwtAuthGuard`. `hasAvatar` in the profile is `avatarFile !== null`; `avatarVersion` is the stored name without extension (or `null`), so a client can cache the image by it.
 
 CQRS (`@nestjs/cqrs`) conventions for new features. The full description is in `README.md` under "CQRS".
 
@@ -63,6 +73,7 @@ Environment (`apps/api/.env`, see `.env.example`):
 - `JWT_EXPIRES_IN` - token lifetime (default `1h`).
 - `PORT` - HTTP port (default `3000`).
 - `MEETING_FILES_DIR` - directory for uploaded meeting files (default `./storage/meeting-files`, git-ignored). Created on startup.
+- `AVATARS_DIR` - directory for user avatars (default `./storage/avatars`, git-ignored). Created on startup.
 
 ## Commands
 
@@ -76,8 +87,8 @@ Run from `apps/api` or from the repo root with `pnpm --filter api <script>`:
 
 Test suites (details in `README.md` under "Tests"):
 
-- Unit: `src/meeting-files/*.spec.ts` (policy, storage cleanup, `Content-Disposition`) and `src/users/**/*-profile.handler.spec.ts` (profile handlers with a mocked Prisma), `src/auth/password.spec.ts` and `src/auth/commands/change-password.handler.spec.ts` (hash helpers, password change rules). No database needed.
-- E2E: `test/auth.e2e-spec.ts` (register and login), `test/change-password.e2e-spec.ts` (password change), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload, list, download, delete, and meeting delete). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
+- Unit: `src/meeting-files/*.spec.ts` (policy, storage cleanup, `Content-Disposition`), `src/common/uploads/*.spec.ts` (413 interceptor) and `src/users/**/*-profile.handler.spec.ts` (profile handlers with a mocked Prisma), `src/auth/password.spec.ts` and `src/auth/commands/change-password.handler.spec.ts` (hash helpers, password change rules). No database needed.
+- E2E: `test/auth.e2e-spec.ts` (register and login), `test/change-password.e2e-spec.ts` (password change), `test/meeting.e2e-spec.ts` (meetings CRUD and ownership), `test/meeting-files.e2e-spec.ts` (file upload, list, download, delete, and meeting delete), `test/avatar-upload.e2e-spec.ts` (avatar upload, replacement, rejection; `AVATARS_DIR` is a temporary directory per test), `test/avatar-download-delete.e2e-spec.ts` (avatar download and delete, isolation between users). They boot `AppModule` with real HTTP and the real DB. Each test creates its own users, so tests don't share state. The file tests point `MEETING_FILES_DIR` at a fresh temporary directory per test.
 - The auth e2e tests check only the token's shape, not its signature. `JWT_SECRET` is loaded from `.env` by `ConfigModule`, so a test could verify the signature if it needs to.
 - `pnpm lint` - `oxlint --type-aware src/ test/`
 - `pnpm format` - Prettier over `src/` and `test/`
