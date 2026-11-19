@@ -28,4 +28,21 @@ describe('getInitials', () => {
   it('uses the first letter of the email when there is no name', () => {
     expect(getInitials({ name: null, email: 'zed@b.c' })).toBe('Z');
   });
+
+  it('skips punctuation before the first letter', () => {
+    expect(getInitials({ name: '«Анна»', email: 'a@b.c' })).toBe('А');
+    expect(getInitials({ name: '(Анна)', email: 'a@b.c' })).toBe('А');
+    expect(getInitials({ name: '@anna', email: 'zed@b.c' })).toBe('A');
+    expect(getInitials({ name: '«Анна» «Петрова»', email: 'a@b.c' })).toBe(
+      'АП',
+    );
+  });
+
+  it('falls back to the email when the name has only punctuation', () => {
+    expect(getInitials({ name: '---', email: 'zed@b.c' })).toBe('Z');
+  });
+
+  it('keeps an emoji with joiners whole', () => {
+    expect(getInitials({ name: '👩‍💻 Анна', email: 'a@b.c' })).toBe('👩‍💻А');
+  });
 });
