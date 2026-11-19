@@ -234,6 +234,18 @@ describe('avatar deletion', () => {
     expect(deleteButton()).toBeTruthy();
   });
 
+  it('blocks the file input while the deletion is pending', async () => {
+    apiMock.getProfile.mockResolvedValue(withAvatar);
+    apiMock.deleteAvatar.mockReturnValue(new Promise(() => {}));
+    render(<EditProfileForm />);
+
+    await clickDelete();
+
+    await waitFor(async () =>
+      expect((await findFileInput()).disabled).toBe(true),
+    );
+  });
+
   it('redirects to login and clears the token on 401', async () => {
     apiMock.getProfile.mockResolvedValue(withAvatar);
     apiMock.deleteAvatar.mockRejectedValue(new ApiError(401, 'Unauthorized'));

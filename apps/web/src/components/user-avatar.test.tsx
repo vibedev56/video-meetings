@@ -76,6 +76,19 @@ describe('UserAvatar', () => {
     expect(apiMock.getAvatar).toHaveBeenCalledTimes(1);
   });
 
+  it('falls back to the initials after the avatar is deleted', async () => {
+    apiMock.getAvatar.mockResolvedValue(new Blob(['x']));
+    const { container, rerender } = render(
+      <UserAvatar profile={{ ...profile, hasAvatar: true }} />,
+    );
+    await waitFor(() => expect(container.querySelector('img')).not.toBeNull());
+
+    rerender(<UserAvatar profile={{ ...profile, hasAvatar: false }} />);
+
+    await waitFor(() => expect(container.querySelector('img')).toBeNull());
+    expect(screen.getByText('ИП')).toBeTruthy();
+  });
+
   it('reloads the image after refreshAvatar (replaced avatar)', async () => {
     apiMock.getAvatar.mockResolvedValue(new Blob(['x']));
     const { container } = render(
