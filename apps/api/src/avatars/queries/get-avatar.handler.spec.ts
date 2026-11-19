@@ -23,6 +23,7 @@ describe('GetAvatarHandler', () => {
     expect(result).toEqual({
       path: join('/data/avatars', 'a.webp'),
       mimeType: 'image/webp',
+      etag: '"a"',
     });
   });
 

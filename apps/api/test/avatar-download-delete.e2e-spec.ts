@@ -73,6 +73,38 @@ describe('Avatar download and delete (e2e)', () => {
     expect(res.body).toEqual(content);
   });
 
+  it('sends an ETag and answers 304 to a matching If-None-Match', async () => {
+    const token = await registerUser();
+    await upload(token, Buffer.from('png bytes'));
+
+    const first = await download(token).expect(200);
+    const etag = first.headers['etag'] as string;
+    expect(etag).toBeTruthy();
+
+    const cached = await request(server())
+      .get('/profile/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .set('If-None-Match', etag)
+      .expect(304);
+    expect(cached.headers['etag']).toBe(etag);
+    expect(cached.headers['cache-control']).toBe('private, no-cache');
+  });
+
+  it('changes the ETag when the avatar is replaced', async () => {
+    const token = await registerUser();
+    await upload(token, Buffer.from('one'));
+    const etag = (await download(token).expect(200)).headers['etag'] as string;
+
+    await upload(token, Buffer.from('two'));
+
+    const res = await request(server())
+      .get('/profile/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .set('If-None-Match', etag)
+      .expect(200);
+    expect(res.headers['etag']).not.toBe(etag);
+  });
+
   it('returns 404 when the user has no avatar', async () => {
     const token = await registerUser();
 
