@@ -471,6 +471,32 @@ describe('EditProfileForm', () => {
       ).toBeTruthy();
     });
 
+    it('shows a generic error on other server failures and keeps the fields', async () => {
+      apiMock.changePassword.mockRejectedValue(new ApiError(500, 'boom'));
+      render(<EditProfileForm />);
+
+      await submitPasswords('old-password', 'new-password');
+
+      expect(
+        await screen.findByText('Не удалось сменить пароль. Попробуйте позже.'),
+      ).toBeTruthy();
+      expect(
+        (screen.getByLabelText('Старый пароль') as HTMLInputElement).value,
+      ).toBe('old-password');
+      expect(routerMock.replace).not.toHaveBeenCalled();
+    });
+
+    it('shows a generic error on an unrelated 400', async () => {
+      apiMock.changePassword.mockRejectedValue(new ApiError(400, 'other'));
+      render(<EditProfileForm />);
+
+      await submitPasswords('old-password', 'new-password');
+
+      expect(
+        await screen.findByText('Не удалось сменить пароль. Попробуйте позже.'),
+      ).toBeTruthy();
+    });
+
     it('clears both fields after a successful change and keeps the session', async () => {
       apiMock.changePassword.mockResolvedValue(null);
       render(<EditProfileForm />);
