@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
+  changePassword,
   deleteMeetingFile,
   downloadMeetingFile,
   listMeetingFiles,
@@ -178,6 +179,44 @@ describe('updateProfile', () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(400);
+  });
+});
+
+describe('changePassword', () => {
+  it('sends POST /auth/password with both passwords and the Bearer token', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(
+      changePassword(TOKEN, 'old-password', 'new-password'),
+    ).resolves.toBeNull();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/password',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          oldPassword: 'old-password',
+          newPassword: 'new-password',
+        }),
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${TOKEN}`,
+        }),
+      }),
+    );
+  });
+
+  it('rejects with the API status and message on 401', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ message: 'Invalid credentials' }, 401),
+    );
+
+    const error = await changePassword(TOKEN, 'a', 'b').catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({
+      status: 401,
+      message: 'Invalid credentials',
+    });
   });
 });
 

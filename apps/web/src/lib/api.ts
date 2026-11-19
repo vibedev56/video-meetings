@@ -135,6 +135,23 @@ export function updateProfile(token: string, name: string) {
   });
 }
 
+/**
+ * `POST /auth/password`. Resolves with `null` (204). Rejects with 401 and the
+ * message `Invalid credentials` for a wrong old password, with 400 for a weak
+ * new password or one equal to the old.
+ */
+export function changePassword(
+  token: string,
+  oldPassword: string,
+  newPassword: string,
+) {
+  return apiRequest<null>('/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ oldPassword, newPassword }),
+    headers: authorization(token),
+  });
+}
+
 /** `GET /meetings` for the user that owns `token`. Rejects with 401 if the token is invalid or expired. */
 export function listMeetings(token: string) {
   return apiRequest<MeetingResponse[]>('/meetings', {
