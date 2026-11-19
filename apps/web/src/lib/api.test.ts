@@ -6,6 +6,7 @@ import {
   downloadMeetingFile,
   listMeetingFiles,
   deleteAvatar,
+  getAvatar,
   listMeetings,
   parseContentDispositionFileName,
   updateProfile,
@@ -279,6 +280,34 @@ describe('deleteAvatar', () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 500 });
+  });
+});
+
+describe('getAvatar', () => {
+  it('sends GET /profile/avatar with the Bearer token and returns a Blob', async () => {
+    fetchMock.mockResolvedValue(
+      new Response('img', {
+        status: 200,
+        headers: { 'Content-Type': 'image/png' },
+      }),
+    );
+
+    const blob = await getAvatar(TOKEN);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/profile/avatar');
+    expect(init.method).toBe('GET');
+    expect(init.headers).toEqual({ Authorization: `Bearer ${TOKEN}` });
+    expect(await blob.text()).toBe('img');
+  });
+
+  it('rejects with the API status', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'nope' }, 404));
+
+    const error = await getAvatar(TOKEN).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 404 });
   });
 });
 

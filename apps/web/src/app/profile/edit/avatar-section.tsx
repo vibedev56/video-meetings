@@ -14,6 +14,7 @@ import {
   redirectToLoginIfUnauthorized,
   requireAccessToken,
 } from '@/lib/session';
+import { refreshAvatar } from '@/lib/use-avatar';
 import { patchCachedProfile } from '@/lib/use-profile';
 
 /** Russian message for a failed upload, by the API status. */
@@ -104,6 +105,7 @@ export function AvatarSection({ hasAvatar }: { hasAvatar: boolean }) {
     setIsUploading(true);
     try {
       await uploadAvatar(token, file);
+      refreshAvatar();
       patchCachedProfile({ hasAvatar: true });
       setMessage('Аватар обновлён');
     } catch (caught) {

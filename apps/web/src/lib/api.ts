@@ -153,6 +153,18 @@ export function uploadAvatar(token: string, file: File) {
   });
 }
 
+/** `GET /profile/avatar`. Resolves with the image. Rejects with 404 when there is no avatar. */
+export async function getAvatar(token: string): Promise<Blob> {
+  const response = await sendRequest('/profile/avatar', {
+    method: 'GET',
+    headers: authorization(token),
+  });
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+  return response.blob();
+}
+
 /** `DELETE /profile/avatar`. Resolves with `null` (204). */
 export function deleteAvatar(token: string) {
   return apiRequest<null>('/profile/avatar', {

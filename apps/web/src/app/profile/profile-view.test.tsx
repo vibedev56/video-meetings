@@ -9,7 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api';
 import { ProfileView } from './profile-view';
 
-const apiMock = vi.hoisted(() => ({ getProfile: vi.fn() }));
+const apiMock = vi.hoisted(() => ({
+  getProfile: vi.fn(),
+  getAvatar: vi.fn(),
+}));
 const routerMock = vi.hoisted(() => ({ replace: vi.fn() }));
 
 vi.mock('@/lib/api', async (importOriginal) => {
@@ -46,8 +49,28 @@ describe('ProfileView', () => {
       await screen.findByRole('heading', { name: 'Иван Петров' }),
     ).toBeTruthy();
     expect(screen.getByText('ivan@example.com')).toBeTruthy();
-    expect(screen.getByText('ИП')).toBeTruthy();
+    // Initials in the header and in the profile card.
+    expect(screen.getAllByText('ИП')).toHaveLength(2);
     expect(apiMock.getProfile).toHaveBeenCalledWith('token-123');
+  });
+
+  it('shows the avatar image in the profile and in the header', async () => {
+    apiMock.getProfile.mockResolvedValue({
+      name: 'Иван Петров',
+      email: 'ivan@example.com',
+      hasAvatar: true,
+    });
+    apiMock.getAvatar.mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
+    URL.createObjectURL = vi.fn(() => 'blob:avatar');
+    URL.revokeObjectURL = vi.fn();
+
+    const { container } = render(<ProfileView />);
+
+    await waitFor(() =>
+      expect(container.querySelectorAll('img')).toHaveLength(2),
+    );
+    expect(apiMock.getAvatar).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('ИП')).toBeNull();
   });
 
   it('links to the edit page', async () => {
@@ -77,7 +100,7 @@ describe('ProfileView', () => {
     expect(
       await screen.findByRole('heading', { name: 'ivan@example.com' }),
     ).toBeTruthy();
-    expect(screen.getByText('I')).toBeTruthy();
+    expect(screen.getAllByText('I')).toHaveLength(2);
   });
 
   it('redirects to login without a token', async () => {
