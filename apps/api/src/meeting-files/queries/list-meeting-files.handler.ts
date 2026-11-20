@@ -19,13 +19,21 @@ export class ListMeetingFilesHandler implements IQueryHandler<
     // missing one, so it gets 404 rather than an empty list.
     const meeting = await this.prisma.meeting.findFirst({
       where: { id: query.meetingId, ownerId: query.ownerId },
-      select: { files: { orderBy: { uploadedAt: 'asc' } } },
+      select: {
+        files: {
+          orderBy: { uploadedAt: 'asc' },
+          // `text` stays out of the list: it can be large.
+          include: { transcription: { select: { status: true, error: true } } },
+        },
+      },
     });
 
     if (!meeting) {
       throw new NotFoundException('Meeting not found');
     }
 
-    return meeting.files.map(toMeetingFileResult);
+    return meeting.files.map((file) =>
+      toMeetingFileResult(file, file.transcription),
+    );
   }
 }

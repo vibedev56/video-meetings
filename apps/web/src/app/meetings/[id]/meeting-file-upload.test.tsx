@@ -31,6 +31,7 @@ const SAVED: MeetingFileResponse = {
   sizeBytes: 3,
   mimeType: 'audio/mpeg',
   uploadedAt: '2026-11-01T10:00:00.000Z',
+  transcription: null,
 };
 
 function mp3(name = 'запись.mp3') {

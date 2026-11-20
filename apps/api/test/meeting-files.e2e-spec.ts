@@ -7,6 +7,8 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
+import { TRANSCRIPTION_RUNNER } from '../src/transcriptions/transcription.runner.js';
+import { FakeTranscriptionRunner } from './support/fake-transcription-runner.js';
 import {
   MAX_FILES_PER_MEETING,
   MAX_FORM_FIELDS,
@@ -107,7 +109,10 @@ describe('Meeting files (e2e)', () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(TRANSCRIPTION_RUNNER)
+      .useValue(new FakeTranscriptionRunner())
+      .compile();
 
     app = moduleFixture.createNestApplication();
     await app.init();
@@ -141,6 +146,8 @@ describe('Meeting files (e2e)', () => {
           sizeBytes: Buffer.byteLength('fake media bytes'),
           mimeType: file.type,
           uploadedAt: expect.any(String),
+          transcription:
+            file === MP3 ? { status: 'PENDING', error: null } : null,
         });
         expect(res.body).not.toHaveProperty('storedName');
 

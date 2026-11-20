@@ -54,6 +54,7 @@ const SAVED: MeetingFileResponse = {
   sizeBytes: 2048,
   mimeType: 'audio/mpeg',
   uploadedAt: '2026-11-01T10:00:00.000Z',
+  transcription: null,
 };
 
 function makeFile() {

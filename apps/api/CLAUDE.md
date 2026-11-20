@@ -47,6 +47,19 @@ Modules:
   - `content-disposition.ts` - `buildAttachmentDisposition()` builds the `attachment` header with an ASCII fallback and `filename*` for non-ASCII names.
   - `meeting-files.controller.ts` - `POST /meetings/:id/files` (201; field `file`), `GET /meetings/:id/files`, `GET /meetings/:id/files/:fileId` (streamed download) and `DELETE /meetings/:id/files/:fileId` (204). All need `Authorization: Bearer <token>`.
 
+  - `events/meeting-file-uploaded.event.ts` - `MeetingFileUploadedEvent(meetingFileId, meetingId, originalName)`. `UploadMeetingFileHandler` publishes it through `EventBus` after the transaction commits. Only `.mp3` and `.mp4` files are transcribed; the upload and list results carry `transcription: { status, error } | null` (`null` for other files; never `text`, never `storedName` or paths).
+- `src/transcriptions/` - `TranscriptionsModule`, built on CQRS. Transcribes uploaded `.mp3` / `.mp4` files with a local Whisper (no network API). It does not import `MeetingFilesModule` services; it reacts to the `MeetingFileUploadedEvent` (it imports only the event class and `meeting-files.config.ts`), and `meeting-files` does not import anything from here (the dependency is one-way: `transcriptions` -> `meeting-files`). `meeting-files/transcribable-file.policy.ts` holds the pure rule (only `.mp3` and `.mp4`, unit-tested in `transcribable-file.policy.spec.ts`). `UploadMeetingFileHandler` creates the `Transcription` row inside the upload transaction, so a crash after the commit cannot leave a file without one:
+  - `transcription-status.ts` - `TranscriptionStatus` (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`), mirroring the Prisma enum. Model `Transcription` (table `transcriptions`): one row per `MeetingFile` (`meetingFileId` unique, cascade delete), with `status` (default `PENDING`), `text`, `error`, `startedAt`, `finishedAt`.
+  - `transcriptions.config.ts` - reads `WHISPER_BIN`, `WHISPER_MODEL` and `WHISPER_TIMEOUT_MS`.
+  - `transcription.runner.ts` - `TranscriptionRunner` interface (`run(filePath): Promise<string>`, optional `shutdown()`) and the `TRANSCRIPTION_RUNNER` injection token. Tests replace it with `.overrideProvider(TRANSCRIPTION_RUNNER).useValue(fake)`. A fake can reject with `TranscriptionFailedError(message)`, whose message is stored in `error`; any other error stores `Transcription failed`.
+  - `whisper-cli.runner.ts` - `WhisperCliRunner`, the real runner. It spawns `whisper <file> --model <WHISPER_MODEL> --output_format txt --output_dir <tmp> --fp16 False` and reads the text file. Safe error messages: `Whisper is not installed`, `Transcription timed out`, `Transcription failed` (non-zero exit or no output). Paths and stderr go only to server logs. The process tree is killed on timeout and on shutdown (`taskkill /T` on Windows, a process group elsewhere).
+  - `transcription.queue.ts` - in-process queue, concurrency 1, so processing never blocks an HTTP request. `stop()` is called on application shutdown (`main.ts` enables shutdown hooks), together with `runner.shutdown()`; an interrupted job stays `PROCESSING` and is re-queued on the next boot.
+  - `commands/` - `StartTranscriptionCommand` (upserts the row, rethrows anything but a deleted file, and enqueues it), `ProcessTranscriptionCommand` (`PROCESSING`, then `COMPLETED` with text or `FAILED` with a short error) and `RecoverTranscriptionsCommand`, each with its handler. `MeetingFileUploadedHandler` (the event handler) sends `StartTranscriptionCommand`.
+  - Recovery: `TranscriptionsModule.onApplicationBootstrap` resets rows stuck in `PROCESSING` to `PENDING` and re-enqueues every `PENDING` row. It also creates rows for mp3/mp4 files that have none. Status writes are retried 3 times.
+  - `queries/` - `GetTranscriptionQuery` and its handler.
+  - `transcriptions.controller.ts` - `GET /meetings/:id/files/:fileId/transcription` returns `{ status, text, error }`; guarded by `JwtAuthGuard`, owner-only. A foreign meeting, an unknown file or a file without a transcription all give 404.
+  - A list request that lands before the row exists reports `PENDING` for an mp3/mp4 file (`toMeetingFileResult`), so the status never flickers.
+
 - `src/avatars/` - `AvatarsModule`, built on CQRS. Uploads go to `AVATARS_DIR` through multer (`diskStorage`, generated file names); the file name is stored in `User.avatarFile`:
   - `avatar.policy.ts` - pure rules: jpg/jpeg/png/webp extension and MIME pairs, 2 MB limit, magic-byte signature check (`matchesAvatarSignature`) and `avatarVersion`. Unit-tested in `avatar.policy.spec.ts`.
   - `avatars.config.ts` - reads `AVATARS_DIR`. `AvatarsModule` creates the directory on startup.
@@ -74,6 +87,9 @@ Environment (`apps/api/.env`, see `.env.example`):
 - `PORT` - HTTP port (default `3000`).
 - `MEETING_FILES_DIR` - directory for uploaded meeting files (default `./storage/meeting-files`, git-ignored). Created on startup.
 - `AVATARS_DIR` - directory for user avatars (default `./storage/avatars`, git-ignored). Created on startup.
+- `WHISPER_BIN` - the `openai-whisper` executable (default `whisper`). Whisper and `ffmpeg` must be installed and on `PATH` (`pip install -U openai-whisper`); the first run downloads the model, which needs network once.
+- `WHISPER_MODEL` - Whisper model (default `tiny`, the lowest one).
+- `WHISPER_TIMEOUT_MS` - time limit for one transcription (default 30 minutes); on timeout the status becomes `FAILED`.
 
 ## Commands
 

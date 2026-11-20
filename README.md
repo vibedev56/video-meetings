@@ -27,6 +27,15 @@ Husky runs `pnpm lint && pnpm test && pnpm --filter api test:e2e` before every c
 
 Connection defaults: user `postgres`, password `postgres`, database `video_meetings`, host port `5432`. Override with `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` in the shell or a root `.env` (git-ignored). If port 5432 is already taken on your machine, set `POSTGRES_PORT` to another port (for example `5433`).
 
+## Transcription prerequisites
+
+Uploaded mp3 and mp4 files are transcribed locally with Whisper, so the machine running the API needs:
+
+- [openai-whisper](https://github.com/openai/whisper): `pip install -U openai-whisper` (the `whisper` command on `PATH`)
+- `ffmpeg` on `PATH` (for example `winget install ffmpeg`, `brew install ffmpeg` or `apt install ffmpeg`)
+
+`WHISPER_MODEL` defaults to `tiny` (the lowest model); the first run downloads it. See `apps/api/README.md` for `WHISPER_BIN`, `WHISPER_MODEL` and `WHISPER_TIMEOUT_MS`. Without Whisper the app still runs and transcriptions end as `FAILED`.
+
 ## Quick start (API)
 
 1. `docker compose up -d postgres`

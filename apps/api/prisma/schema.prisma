@@ -20,11 +20,11 @@ model User {
 }
 
 model Meeting {
-  id           String   @id @default(uuid())
+  id           String        @id @default(uuid())
   title        String
   date         DateTime
   participants String[]
-  createdAt    DateTime @default(now())
+  createdAt    DateTime      @default(now())
   ownerId      String
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   files        MeetingFile[]
@@ -34,15 +34,40 @@ model Meeting {
 }
 
 model MeetingFile {
-  id           String   @id @default(uuid())
-  meetingId    String
-  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  originalName String
-  storedName   String   @unique
-  sizeBytes    Int
-  mimeType     String
-  uploadedAt   DateTime @default(now())
+  id            String         @id @default(uuid())
+  meetingId     String
+  meeting       Meeting        @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  originalName  String
+  storedName    String         @unique
+  sizeBytes     Int
+  mimeType      String
+  uploadedAt    DateTime       @default(now())
+  transcription Transcription? @relation("MeetingFileTranscription")
 
   @@index([meetingId])
   @@map("meeting_files")
+}
+
+enum TranscriptionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Transcription {
+  id            String              @id @default(uuid())
+  meetingFileId String              @unique
+  meetingFile   MeetingFile         @relation("MeetingFileTranscription", fields: [meetingFileId], references: [id], onDelete: Cascade)
+  status        TranscriptionStatus @default(PENDING)
+  text          String?
+  error         String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([meetingFileId])
+  @@index([status])
+  @@map("transcriptions")
 }

@@ -15,6 +15,7 @@ const apiMock = vi.hoisted(() => ({
   listMeetingFiles: vi.fn(),
   downloadMeetingFile: vi.fn(),
   deleteMeetingFile: vi.fn(),
+  getTranscription: vi.fn(),
 }));
 
 const downloadMock = vi.hoisted(() => ({
@@ -47,6 +48,7 @@ const FILE: MeetingFileResponse = {
   sizeBytes: 2048,
   mimeType: 'audio/mpeg',
   uploadedAt: '2026-11-01T10:00:00.000Z',
+  transcription: null,
 };
 
 beforeEach(() => {
@@ -99,6 +101,60 @@ describe('MeetingFiles list', () => {
 
     await waitFor(() =>
       expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'),
+    );
+  });
+});
+
+describe('MeetingFiles transcription', () => {
+  it('shows the status badge and no badge for other formats', async () => {
+    apiMock.listMeetingFiles.mockResolvedValue([
+      {
+        ...FILE,
+        transcription: { status: 'PROCESSING', error: null },
+      },
+      { ...FILE, id: 'f2', originalName: 'doc.pdf', transcription: null },
+    ]);
+
+    render(<MeetingFiles meetingId={MEETING_ID} />);
+
+    expect(await screen.findByText('Транскрибация…')).toBeTruthy();
+    expect(screen.queryByText('В очереди')).toBeNull();
+  });
+
+  it('shows the error of a failed transcription', async () => {
+    apiMock.listMeetingFiles.mockResolvedValue([
+      {
+        ...FILE,
+        transcription: { status: 'FAILED', error: 'Transcription failed' },
+      },
+    ]);
+
+    render(<MeetingFiles meetingId={MEETING_ID} />);
+
+    expect(await screen.findByText('Ошибка транскрибации')).toBeTruthy();
+    expect(screen.getByText('Transcription failed')).toBeTruthy();
+  });
+
+  it('opens the transcript text for a completed file', async () => {
+    apiMock.listMeetingFiles.mockResolvedValue([
+      { ...FILE, transcription: { status: 'COMPLETED', error: null } },
+    ]);
+    apiMock.getTranscription.mockResolvedValue({
+      status: 'COMPLETED',
+      text: 'Привет, мир',
+      error: null,
+    });
+
+    render(<MeetingFiles meetingId={MEETING_ID} />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Транскрипция' }),
+    );
+
+    expect(await screen.findByText('Привет, мир')).toBeTruthy();
+    expect(apiMock.getTranscription).toHaveBeenCalledWith(
+      TOKEN,
+      MEETING_ID,
+      'f1',
     );
   });
 });

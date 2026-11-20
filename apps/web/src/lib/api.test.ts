@@ -41,6 +41,7 @@ describe('listMeetingFiles', () => {
         sizeBytes: 10,
         mimeType: 'audio/mpeg',
         uploadedAt: '2026-11-01T10:00:00.000Z',
+        transcription: null,
       },
     ];
     fetchMock.mockResolvedValue(jsonResponse(files));
