@@ -1,6 +1,7 @@
 import { Module, ValidationPipe } from '@nestjs/common';
 import { APP_PIPE } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { AiAnalysisModule } from './ai-analysis/ai-analysis.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { AvatarsModule } from './avatars/avatars.module.js';
 import { MeetingFilesModule } from './meeting-files/meeting-files.module.js';
@@ -21,6 +22,7 @@ import { UsersModule } from './users/users.module.js';
     MeetingFilesModule,
     AvatarsModule,
     TranscriptionsModule,
+    AiAnalysisModule,
   ],
   providers: [
     {

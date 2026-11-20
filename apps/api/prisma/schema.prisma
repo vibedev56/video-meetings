@@ -20,14 +20,21 @@ model User {
 }
 
 model Meeting {
-  id           String        @id @default(uuid())
-  title        String
-  date         DateTime
-  participants String[]
-  createdAt    DateTime      @default(now())
-  ownerId      String
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  files        MeetingFile[]
+  id            String             @id @default(uuid())
+  title         String
+  date          DateTime
+  participants  String[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @default(now()) @updatedAt
+  ownerId       String
+  owner         User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  files         MeetingFile[]
+  summary       String?
+  decisions     String[]
+  aiStatus      AiProcessingStatus @default(PENDING)
+  aiError       String?
+  aiProcessedAt DateTime?
+  tasks         Task[]             @relation("MeetingTasks")
 
   @@index([ownerId])
   @@map("meetings")
@@ -70,4 +77,33 @@ model Transcription {
   @@index([meetingFileId])
   @@index([status])
   @@map("transcriptions")
+}
+
+enum AiProcessingStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  FAILED
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+}
+
+model Task {
+  id              String     @id @default(uuid())
+  title           String
+  // Normalized title, the dedupe key inside one meeting.
+  titleKey        String
+  assignee        String?
+  status          TaskStatus @default(OPEN)
+  sourceMeetingId String
+  sourceMeeting   Meeting    @relation("MeetingTasks", fields: [sourceMeetingId], references: [id], onDelete: Cascade)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([sourceMeetingId, titleKey])
+  @@index([sourceMeetingId])
+  @@map("tasks")
 }

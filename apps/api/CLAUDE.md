@@ -60,6 +60,15 @@ Modules:
   - `transcriptions.controller.ts` - `GET /meetings/:id/files/:fileId/transcription` returns `{ status, text, error }`; guarded by `JwtAuthGuard`, owner-only. A foreign meeting, an unknown file or a file without a transcription all give 404.
   - A list request that lands before the row exists reports `PENDING` for an mp3/mp4 file (`toMeetingFileResult`), so the status never flickers.
 
+- `src/tasks/` - `TasksModule`, exports `TasksService`: `listByMeeting`, `findByText` and `upsert`, all scoped by `sourceMeetingId` (a task of another meeting can be neither found nor changed). Model `Task` is deduplicated per meeting by the normalized title (`titleKey`). `MeetingsService` (`src/meetings/`, exported by `MeetingsModule`) holds the AI-related meeting writes (`updateAiResult` with the owner check, `markAiStatus`, `markAiSkipped`, `resetInterruptedAi`). `GET /meetings/:id` also returns `summary`, `decisions`, `aiStatus` (`PENDING`, `IN_PROGRESS`, `DONE`, `FAILED`), `aiError` and `tasks`.
+- `src/ai-analysis/` - `AiAnalysisModule`: automatic AI analysis of transcripts with `@anthropic-ai/claude-agent-sdk` (no button). `ProcessTranscriptionHandler` publishes `TranscriptionCompletedEvent(meetingFileId, meetingId)` (`transcriptions/events/`) once a transcript is saved; `TranscriptionCompletedHandler` reacts to it. The dependency is one-way (`ai-analysis` -> `transcriptions` event class; `transcriptions` never imports `ai-analysis`):
+  - `ai-analysis.service.ts` - `AiAnalysisService.start(meetingId)` is fire-and-forget (never rejects) and serializes runs per meeting. Status goes `IN_PROGRESS` -> `DONE` or `FAILED` (short `aiError`). All completed transcripts of the meeting go into one `<transcript>` block. Up to 3 attempts, retried on an exception or when the agent stored no result. Without `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` the meeting stays `PENDING` with `aiError` = `AI processing is not configured` (`MeetingsService.markAiSkipped`; the web shows a neutral "not configured" hint, not an error) and the SDK is never called. On boot, `IN_PROGRESS` meetings are reset to `PENDING` and re-run.
+  - `ai-agent.runner.ts` - `AiAgentRunner` interface and the `AI_AGENT_RUNNER` token (tests use `.overrideProvider(AI_AGENT_RUNNER)`). `claude-agent.runner.ts` is the real one: `query()` with model `AI_MODEL` (default `haiku`), `effort: 'low'`, `maxTurns`, `tools: []` (no built-in tools), only the three MCP tools allowed, `settingSources: []`, no session persistence.
+  - `meeting-tools.factory.ts` - in-process MCP server (`createSdkMcpServer`, `tool()`, Zod): `findTask`, `upsertTask`, `updateMeeting`. `meetingId` and `ownerId` are closed over at creation and are not tool arguments, so the model cannot touch another meeting.
+  - `ai-hooks.ts` - per-run hooks: `PreToolUse` denies `upsertTask` with a title shorter than 3 characters and any call past 20; `PostToolUse` logs tool name, arguments and result through the Nest `Logger`.
+  - `ai-analysis.prompts.ts` - the system prompt says transcript content is untrusted data; `ai-analysis.constants.ts` holds the limits; `ai-analysis.config.ts` reads the env.
+  - Unit tests: `ai-hooks.spec.ts`, `meeting-tools.factory.spec.ts` (meeting isolation), `ai-analysis.service.spec.ts` (SDK mocked, no keys); `tasks/tasks.service.spec.ts`.
+
 - `src/avatars/` - `AvatarsModule`, built on CQRS. Uploads go to `AVATARS_DIR` through multer (`diskStorage`, generated file names); the file name is stored in `User.avatarFile`:
   - `avatar.policy.ts` - pure rules: jpg/jpeg/png/webp extension and MIME pairs, 2 MB limit, magic-byte signature check (`matchesAvatarSignature`) and `avatarVersion`. Unit-tested in `avatar.policy.spec.ts`.
   - `avatars.config.ts` - reads `AVATARS_DIR`. `AvatarsModule` creates the directory on startup.
@@ -90,6 +99,9 @@ Environment (`apps/api/.env`, see `.env.example`):
 - `WHISPER_BIN` - the `openai-whisper` executable (default `whisper`). Whisper and `ffmpeg` must be installed and on `PATH` (`pip install -U openai-whisper`); the first run downloads the model, which needs network once.
 - `WHISPER_MODEL` - Whisper model (default `tiny`, the lowest one).
 - `WHISPER_TIMEOUT_MS` - time limit for one transcription (default 30 minutes); on timeout the status becomes `FAILED`.
+- `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` - credentials for the AI analysis (one is enough). Keep real values only in the git-ignored `.env`; `.env.example` has empty placeholders. Empty means the analysis is skipped softly (no error).
+- `ANTHROPIC_BASE_URL` - optional API base URL (proxy or gateway).
+- `AI_MODEL` - model for the analysis (default `haiku`).
 
 ## Commands
 

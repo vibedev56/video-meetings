@@ -15,7 +15,10 @@ import { MeetingFileItem } from './meeting-file-item';
 import { MeetingFileUpload } from './meeting-file-upload';
 import { TranscriptDialog } from './transcript-dialog';
 import { useFileDownload } from './use-file-download';
-import { useTranscriptionPolling } from './use-transcription-polling';
+import {
+  hasActiveTranscription,
+  useTranscriptionPolling,
+} from './use-transcription-polling';
 
 type LoadState =
   | { status: 'loading' }
@@ -23,7 +26,14 @@ type LoadState =
   | { status: 'ready'; files: MeetingFileResponse[] };
 
 /** Files of one meeting: list, download and delete (with confirmation). */
-export function MeetingFiles({ meetingId }: { meetingId: string }) {
+export function MeetingFiles({
+  meetingId,
+  onTranscriptionActiveChange,
+}: {
+  meetingId: string;
+  /** Reports whether some file is still being transcribed. */
+  onTranscriptionActiveChange?: (isActive: boolean) => void;
+}) {
   const router = useRouter();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
@@ -40,6 +50,12 @@ export function MeetingFiles({ meetingId }: { meetingId: string }) {
 
   const [transcriptFile, setTranscriptFile] =
     useState<MeetingFileResponse | null>(null);
+
+  const isTranscribing =
+    loadState.status === 'ready' && hasActiveTranscription(loadState.files);
+  useEffect(() => {
+    onTranscriptionActiveChange?.(isTranscribing);
+  }, [isTranscribing, onTranscriptionActiveChange]);
 
   useTranscriptionPolling(
     meetingId,
