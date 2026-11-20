@@ -7,6 +7,10 @@
     {
       "milestone": "Фаза 6: Аватар в интерфейсе (frontend)",
       "branch": "feature/phase-10"
+    },
+    {
+      "milestone": "Фаза 7: Аватар в интерфейсе (frontend)",
+      "branch": "feature/phase-10"
     }
   ]
 }
