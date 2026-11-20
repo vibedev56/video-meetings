@@ -1,47 +1,34 @@
 'use client';
 
-import { Alert, Button, Card, Modal, Spinner } from '@heroui/react';
+import { Alert, Button, Card, Spinner } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   deleteMeetingFile,
-  downloadMeetingFile,
   hasStatus,
   listMeetingFiles,
   type MeetingFileResponse,
 } from '@/lib/api';
-import {
-  collectToBlob,
-  pickSaveFile,
-  saveBlob,
-  streamToWritable,
-  supportsFilePicker,
-  type SaveWritable,
-} from '@/lib/file-download';
-import { formatDateTime, formatFileSize } from '@/lib/format';
 import { getAccessToken, redirectToLoginIfUnauthorized } from '@/lib/session';
+import { DeleteFileDialog } from './delete-file-dialog';
+import { MeetingFileItem } from './meeting-file-item';
 import { MeetingFileUpload } from './meeting-file-upload';
+import { TranscriptDialog } from './transcript-dialog';
+import { useFileDownload } from './use-file-download';
+import { useTranscriptionPolling } from './use-transcription-polling';
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'ready'; files: MeetingFileResponse[] };
 
-function downloadErrorMessage(error: unknown, fileName: string) {
-  if (hasStatus(error, 404)) {
-    return `Файл «${fileName}» не найден. Возможно, его уже удалили. Обновите страницу.`;
-  }
-  return `Не удалось скачать файл «${fileName}». Проверьте подключение и попробуйте снова.`;
-}
-
 /** Files of one meeting: list, download and delete (with confirmation). */
 export function MeetingFiles({ meetingId }: { meetingId: string }) {
   const router = useRouter();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const { downloadingId, downloadProgress, downloadError, handleDownload } =
+    useFileDownload(meetingId);
   // The file the delete dialog is about. It is kept after the dialog closes,
   // so the text does not go empty while the dialog animates out.
   const [dialogFile, setDialogFile] = useState<MeetingFileResponse | null>(
@@ -50,6 +37,15 @@ export function MeetingFiles({ meetingId }: { meetingId: string }) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [transcriptFile, setTranscriptFile] =
+    useState<MeetingFileResponse | null>(null);
+
+  useTranscriptionPolling(
+    meetingId,
+    loadState.status === 'ready' ? loadState.files : null,
+    (files) => setLoadState({ status: 'ready', files }),
+  );
 
   useEffect(() => {
     let isCancelled = false;
@@ -90,61 +86,6 @@ export function MeetingFiles({ meetingId }: { meetingId: string }) {
     );
     if (loadState.status !== 'ready') {
       setReloadKey((key) => key + 1);
-    }
-  }
-
-  async function handleDownload(file: MeetingFileResponse) {
-    const token = getAccessToken();
-    if (!token) {
-      router.replace('/auth/login');
-      return;
-    }
-
-    setDownloadError(null);
-    setDownloadingId(file.id);
-    setDownloadProgress(null);
-
-    // Open the save dialog before any `await`: the browser allows it only
-    // while the click is still a user gesture.
-    const picked = supportsFilePicker()
-      ? pickSaveFile(file.originalName)
-      : Promise.resolve(undefined);
-    let writable: SaveWritable | undefined;
-
-    try {
-      const target = await picked;
-      if (target === null) {
-        // The user cancelled the save dialog: nothing to download.
-        return;
-      }
-      writable = target;
-
-      const { body, fileName, totalBytes } = await downloadMeetingFile(
-        token,
-        meetingId,
-        file.id,
-      );
-      const onProgress = (received: number, total: number | null) =>
-        setDownloadProgress(
-          total ? Math.min(100, Math.floor((received * 100) / total)) : null,
-        );
-
-      if (writable) {
-        await streamToWritable(body, writable, totalBytes, onProgress);
-      } else {
-        const blob = await collectToBlob(body, totalBytes, onProgress);
-        saveBlob(blob, fileName ?? file.originalName);
-      }
-    } catch (error) {
-      // Drop the partly written file so no half-downloaded copy remains.
-      await writable?.abort().catch(() => undefined);
-      if (redirectToLoginIfUnauthorized(error, router)) {
-        return;
-      }
-      setDownloadError(downloadErrorMessage(error, file.originalName));
-    } finally {
-      setDownloadingId(null);
-      setDownloadProgress(null);
     }
   }
 
@@ -268,96 +209,35 @@ export function MeetingFiles({ meetingId }: { meetingId: string }) {
 
       {loadState.status === 'ready' && loadState.files.length > 0 && (
         <ul className="flex flex-col gap-3">
-          {loadState.files.map((file) => {
-            const isDownloading = downloadingId === file.id;
-            return (
-              <li key={file.id}>
-                <Card>
-                  <Card.Content className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1">
-                      <span className="break-all font-medium text-zinc-950 dark:text-zinc-50">
-                        {file.originalName}
-                      </span>
-                      <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                        {formatFileSize(file.sizeBytes)} ·{' '}
-                        {formatDateTime(file.uploadedAt)}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="min-h-11"
-                        isDisabled={downloadingId !== null}
-                        onPress={() => handleDownload(file)}
-                      >
-                        {isDownloading
-                          ? downloadProgress !== null
-                            ? `Скачивание… ${downloadProgress}%`
-                            : 'Скачивание…'
-                          : 'Скачать'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="min-h-11"
-                        onPress={() => openDeleteConfirmation(file)}
-                      >
-                        Удалить
-                      </Button>
-                    </div>
-                  </Card.Content>
-                </Card>
-              </li>
-            );
-          })}
+          {loadState.files.map((file) => (
+            <MeetingFileItem
+              key={file.id}
+              file={file}
+              isDownloading={downloadingId === file.id}
+              isDownloadBusy={downloadingId !== null}
+              downloadProgress={downloadProgress}
+              onDownload={handleDownload}
+              onShowTranscript={setTranscriptFile}
+              onDelete={openDeleteConfirmation}
+            />
+          ))}
         </ul>
       )}
 
-      <Modal isOpen={isDeleteDialogOpen} onOpenChange={handleModalOpenChange}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog>
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Heading>Удалить файл?</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <p className="text-zinc-600 dark:text-zinc-400">
-                  Файл «{dialogFile?.originalName}» будет удален без возможности
-                  восстановления.
-                </p>
-                {deleteError && (
-                  <Alert status="danger">
-                    <Alert.Indicator />
-                    <Alert.Content>
-                      <Alert.Description>{deleteError}</Alert.Description>
-                    </Alert.Content>
-                  </Alert>
-                )}
-              </Modal.Body>
-              <Modal.Footer>
-                <Button
-                  slot="close"
-                  variant="outline"
-                  className="min-h-11"
-                  isDisabled={isDeleting}
-                >
-                  Отмена
-                </Button>
-                <Button
-                  variant="danger"
-                  className="min-h-11"
-                  isDisabled={isDeleting}
-                  onPress={handleConfirmDelete}
-                >
-                  {isDeleting ? 'Удаление…' : 'Удалить'}
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <TranscriptDialog
+        meetingId={meetingId}
+        file={transcriptFile}
+        onClose={() => setTranscriptFile(null)}
+      />
+
+      <DeleteFileDialog
+        isOpen={isDeleteDialogOpen}
+        file={dialogFile}
+        isDeleting={isDeleting}
+        error={deleteError}
+        onOpenChange={handleModalOpenChange}
+        onConfirm={handleConfirmDelete}
+      />
     </section>
   );
 }
