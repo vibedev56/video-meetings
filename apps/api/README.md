@@ -43,6 +43,8 @@ $ cp .env.example .env
 - `JWT_SECRET` - a long random string. The app will not start without it.
 - `MEETING_FILES_DIR` and `AVATARS_DIR` - directories for meeting files and user avatars (defaults `./storage/meeting-files` and `./storage/avatars`, git-ignored). Both are created on startup.
 
+- `WHISPER_BIN`, `WHISPER_MODEL`, `WHISPER_TIMEOUT_MS` - local transcription of uploaded mp3/mp4 files (defaults `whisper`, `tiny`, 30 minutes). It needs [openai-whisper](https://github.com/openai/whisper) and `ffmpeg` on `PATH`: `pip install -U openai-whisper`, then install ffmpeg (`winget install ffmpeg`, `brew install ffmpeg` or `apt install ffmpeg`). The first run downloads the model. Without Whisper the app still works; transcriptions end as `FAILED` with the error `Whisper is not installed`.
+
 Then install, apply migrations, and run:
 
 ```bash
@@ -59,6 +61,7 @@ $ pnpm dev:api              # from the repo root; or `pnpm start:dev` here
 - `AuthModule` (`src/auth/`) - registration, login, token signing (`AuthTokenService`), and `JwtAuthGuard`. Gets user data from `UsersModule` through the buses, not by importing it.
 - `MeetingsModule` (`src/meetings/`) - meetings, built on CQRS. Uses `AuthModule` for `JwtAuthGuard`.
 - `MeetingFilesModule` (`src/meeting-files/`) - files attached to a meeting, built on CQRS. Stores uploads in `MEETING_FILES_DIR` through multer (`diskStorage`) under generated names. Creates the directory at startup.
+- `TranscriptionsModule` (`src/transcriptions/`) - transcribes uploaded `.mp3` and `.mp4` files with a local Whisper, built on CQRS. It reacts to `MeetingFileUploadedEvent` (published by `MeetingFilesModule` after an upload is committed), creates a `Transcription` row and processes rows one at a time in an in-process queue. Statuses: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`. Rows left in `PROCESSING` or `PENDING` are re-queued on startup. The Whisper call sits behind the `TranscriptionRunner` interface, so tests use a fake.
 - `AvatarsModule` (`src/avatars/`) - user avatars, built on CQRS. Stores uploads in `AVATARS_DIR` through multer (`diskStorage`) under generated names. Creates the directory at startup.
 
 ## Endpoints
@@ -83,7 +86,8 @@ Meeting endpoints need `Authorization: Bearer <accessToken>`; without a valid to
 Meeting file endpoints also need the Bearer token.
 
 - `POST /meetings/:id/files` - multipart form with one file in the `file` field. Returns the stored file with status 201. Limits: 500 MB per file (413, checked against `Content-Length` before the body is read, and while streaming), extension and MIME type must match a pair in the allow-list: mp3, wav, m4a, ogg, mp4, webm, mov (400), at most 5 files per meeting (409). The form may carry at most 10 text fields besides the file (400). Returns 404 for another user's meeting. A rejected upload leaves no file on disk.
-- `GET /meetings/:id/files` - returns the meeting's files in upload order (`id`, `originalName`, `sizeBytes`, `mimeType`, `uploadedAt`). Returns 404 for another user's meeting.
+- `GET /meetings/:id/files` - returns the meeting's files in upload order (`id`, `originalName`, `sizeBytes`, `mimeType`, `uploadedAt`, `transcription`). `transcription` is `{ "status": "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED", "error": string | null }` for mp3 and mp4 files and `null` for other formats (the text is not included). `POST` returns the same field (`PENDING` for a new mp3/mp4). Returns 404 for another user's meeting.
+- `GET /meetings/:id/files/:fileId/transcription` - returns `{ "status", "text": string | null, "error": string | null }`. `text` is set when the status is `COMPLETED`. Returns 404 for another user's meeting, an unknown file, or a file without a transcription.
 - `GET /meetings/:id/files/:fileId` - streams the file with its stored bytes. `Content-Disposition` is `attachment` with the original name in `filename*` (RFC 5987, so Cyrillic names work). Returns 404 for another user's meeting, an unknown file, or a file missing from disk.
 - `DELETE /meetings/:id/files/:fileId` - removes the file record and the file on disk. Returns 204. Returns 404 for another user's meeting or an unknown file.
 
