@@ -64,3 +64,24 @@ Use `pnpm --filter <app> <script>` to target a single app (`web` or `api`).
 - `gh issue list` всегда с `--json number,title`
 - `npm run test` всегда с `--silent`
 - `npx tsc --noEmit` всегда с `2>&1 | tail -5`
+
+## Именование
+- Файлы: feature.type.ts (meetings.service.ts)
+- Методы описывают действие: createMeetingWithFiles
+- Переменные по смыслу: meetingId не id, x, data
+- Enum вместо строк: MeetingStatus.PENDING не 'pnd'
+- Константы вместо magic numbers: MAX_FILE_SIZE_MB
+
+## Размер
+- Файл > 200 строк -> декомпозируй перед добавлением кода
+- Метод > 30 строк -> выдели в приватный метод
+- Вложенность > 3 уровней -> рефакторить
+
+## Зависимости
+- Импортируй через модуль, не через сервис напрямую
+- Никаких circular dependencies — проверяй перед коммитом
+- Shared типы только из @app/shared/types
+
+## Рефакторинг
+- Перед добавлением кода в большой файл — декомпозируй
+- Тесты зелёные на каждом шаге рефакторинга
