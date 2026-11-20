@@ -20,6 +20,37 @@ export interface MeetingResponse {
   participants: string[];
 }
 
+export enum AiProcessingStatus {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  DONE = 'DONE',
+  FAILED = 'FAILED',
+}
+
+export enum TaskStatus {
+  OPEN = 'OPEN',
+  DONE = 'DONE',
+}
+
+/** Action item extracted from a meeting by the AI. */
+export interface TaskResponse {
+  id: string;
+  title: string;
+  assignee: string | null;
+  status: TaskStatus;
+  sourceMeetingId: string;
+  createdAt: string;
+}
+
+/** Meeting as returned by `GET /meetings/:id`, with the AI results. */
+export interface MeetingDetailResponse extends MeetingResponse {
+  summary: string | null;
+  decisions: string[];
+  aiStatus: AiProcessingStatus;
+  aiError: string | null;
+  tasks: TaskResponse[];
+}
+
 /** `POST /auth/register`. Resolves with the access token of the new user. */
 export function registerUser(email: string, password: string) {
   return apiRequest<AuthTokenResponse>('/auth/register', {
@@ -141,7 +172,7 @@ export function createMeeting(
 
 /** `GET /meetings/:id`. Rejects with 404 if the meeting does not exist or belongs to another user. */
 export function getMeeting(token: string, meetingId: string) {
-  return apiRequest<MeetingResponse>(
+  return apiRequest<MeetingDetailResponse>(
     `/meetings/${encodeURIComponent(meetingId)}`,
     { method: 'GET', headers: authorization(token) },
   );

@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { CreateMeetingCommand } from './commands/create-meeting.command.js';
 import { DeleteMeetingCommand } from './commands/delete-meeting.command.js';
 import { CreateMeetingDto } from './dto/create-meeting.dto.js';
-import type { MeetingResult } from './meeting.result.js';
+import type { MeetingDetailResult, MeetingResult } from './meeting.result.js';
 import { GetMeetingQuery } from './queries/get-meeting.query.js';
 import { ListMeetingsQuery } from './queries/list-meetings.query.js';
 
@@ -52,7 +52,7 @@ export class MeetingsController {
   get(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-  ): Promise<MeetingResult> {
+  ): Promise<MeetingDetailResult> {
     return this.queryBus.execute(new GetMeetingQuery(user.id, id));
   }
 

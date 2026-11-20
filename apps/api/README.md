@@ -44,6 +44,7 @@ $ cp .env.example .env
 - `MEETING_FILES_DIR` and `AVATARS_DIR` - directories for meeting files and user avatars (defaults `./storage/meeting-files` and `./storage/avatars`, git-ignored). Both are created on startup.
 
 - `WHISPER_BIN`, `WHISPER_MODEL`, `WHISPER_TIMEOUT_MS` - local transcription of uploaded mp3/mp4 files (defaults `whisper`, `tiny`, 30 minutes). It needs [openai-whisper](https://github.com/openai/whisper) and `ffmpeg` on `PATH`: `pip install -U openai-whisper`, then install ffmpeg (`winget install ffmpeg`, `brew install ffmpeg` or `apt install ffmpeg`). The first run downloads the model. Without Whisper the app still works; transcriptions end as `FAILED` with the error `Whisper is not installed`.
+- `ANTHROPIC_API_KEY` (or `ANTHROPIC_AUTH_TOKEN`), optional `ANTHROPIC_BASE_URL` and `AI_MODEL` (default `haiku`) - AI analysis of transcripts. Put real values only in the git-ignored `.env`. Without a key the analysis is skipped softly (the meeting stays `PENDING` with `aiError` `AI processing is not configured`, shown as a neutral hint) and the rest of the app works.
 
 Then install, apply migrations, and run:
 
@@ -62,6 +63,8 @@ $ pnpm dev:api              # from the repo root; or `pnpm start:dev` here
 - `MeetingsModule` (`src/meetings/`) - meetings, built on CQRS. Uses `AuthModule` for `JwtAuthGuard`.
 - `MeetingFilesModule` (`src/meeting-files/`) - files attached to a meeting, built on CQRS. Stores uploads in `MEETING_FILES_DIR` through multer (`diskStorage`) under generated names. Creates the directory at startup.
 - `TranscriptionsModule` (`src/transcriptions/`) - transcribes uploaded `.mp3` and `.mp4` files with a local Whisper, built on CQRS. It reacts to `MeetingFileUploadedEvent` (published by `MeetingFilesModule` after an upload is committed), creates a `Transcription` row and processes rows one at a time in an in-process queue. Statuses: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`. Rows left in `PROCESSING` or `PENDING` are re-queued on startup. The Whisper call sits behind the `TranscriptionRunner` interface, so tests use a fake.
+- `TasksModule` (`src/tasks/`) - `TasksService` with `findByText` and `upsert`, strictly scoped to one meeting (`Task.sourceMeetingId`).
+- `AiAnalysisModule` (`src/ai-analysis/`) - after a transcript is saved (`TranscriptionCompletedEvent`), runs the Claude Agent SDK (model Haiku, effort low, no built-in tools) in the background. The agent uses three in-process MCP tools (`findTask`, `upsertTask`, `updateMeeting`; the meeting id is fixed by closure, not chosen by the model) to fill the meeting's summary, decisions and action items. Hooks limit tool calls to 20, reject task titles shorter than 3 characters and log every call. Status: `PENDING`, `IN_PROGRESS`, `DONE`, `FAILED`; retried up to 3 times. The SDK call sits behind `AiAgentRunner`, so tests use a fake. `GET /meetings/:id` returns `summary`, `decisions`, `aiStatus`, `aiError` and `tasks`.
 - `AvatarsModule` (`src/avatars/`) - user avatars, built on CQRS. Stores uploads in `AVATARS_DIR` through multer (`diskStorage`) under generated names. Creates the directory at startup.
 
 ## Endpoints

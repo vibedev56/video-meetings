@@ -36,6 +36,10 @@ Uploaded mp3 and mp4 files are transcribed locally with Whisper, so the machine 
 
 `WHISPER_MODEL` defaults to `tiny` (the lowest model); the first run downloads it. See `apps/api/README.md` for `WHISPER_BIN`, `WHISPER_MODEL` and `WHISPER_TIMEOUT_MS`. Without Whisper the app still runs and transcriptions end as `FAILED`.
 
+## AI analysis
+
+When a transcript is saved, the API analyses it in the background with the Claude Agent SDK (Haiku) and stores a summary, decisions and action items on the meeting. Set `ANTHROPIC_API_KEY` (optionally `ANTHROPIC_BASE_URL`) in `apps/api/.env` only; never commit it. Without a key the analysis is skipped softly (the meeting stays `PENDING` with a hint "ИИ-анализ не настроен") and everything else works. Details in `apps/api/README.md`.
+
 ## Quick start (API)
 
 1. `docker compose up -d postgres`

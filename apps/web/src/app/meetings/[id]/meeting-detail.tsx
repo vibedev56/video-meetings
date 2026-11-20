@@ -3,22 +3,37 @@
 import { Alert, Button, Card, Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { getMeeting, hasStatus, type MeetingResponse } from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { getMeeting, hasStatus, type MeetingDetailResponse } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { getAccessToken, redirectToLoginIfUnauthorized } from '@/lib/session';
+import { MeetingAiInsights } from './meeting-ai-insights';
 import { MeetingFiles } from './meeting-files';
+import { useAiStatusPolling } from './use-ai-status-polling';
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'not-found' }
   | { status: 'error' }
-  | { status: 'ready'; meeting: MeetingResponse };
+  | { status: 'ready'; meeting: MeetingDetailResponse };
 
 export function MeetingDetail({ meetingId }: { meetingId: string }) {
   const router = useRouter();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
+  // Sticky: once transcription ran on this page, a PENDING AI status is polled.
+  const [hasTranscriptionActivity, setHasTranscriptionActivity] =
+    useState(false);
+  const handleTranscriptionActive = useCallback((isActive: boolean) => {
+    if (isActive) setHasTranscriptionActivity(true);
+  }, []);
+
+  useAiStatusPolling(
+    meetingId,
+    state.status === 'ready' ? state.meeting : null,
+    hasTranscriptionActivity,
+    (meeting) => setState({ status: 'ready', meeting }),
+  );
 
   useEffect(() => {
     let isCancelled = false;
@@ -128,9 +143,16 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
           </section>
         )}
 
+        {state.status === 'ready' && (
+          <MeetingAiInsights meeting={state.meeting} />
+        )}
+
         {/* Loads in parallel with the meeting. It stays mounted while the meeting loads and is hidden only if the meeting is missing or failed. */}
         {(state.status === 'loading' || state.status === 'ready') && (
-          <MeetingFiles meetingId={meetingId} />
+          <MeetingFiles
+            meetingId={meetingId}
+            onTranscriptionActiveChange={handleTranscriptionActive}
+          />
         )}
       </main>
     </div>

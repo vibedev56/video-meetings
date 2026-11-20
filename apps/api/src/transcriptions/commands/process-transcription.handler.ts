@@ -1,9 +1,10 @@
 import { Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { CommandHandler, EventBus, ICommandHandler } from '@nestjs/cqrs';
 import { basename, join } from 'node:path';
 import { getMeetingFilesDir } from '../../meeting-files/meeting-files.config.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { TranscriptionCompletedEvent } from '../events/transcription-completed.event.js';
 import { TranscriptionStatus } from '../transcription-status.js';
 import {
   GENERIC_FAILURE_MESSAGE,
@@ -37,6 +38,7 @@ export class ProcessTranscriptionHandler implements ICommandHandler<
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly eventBus: EventBus,
     @Inject(TRANSCRIPTION_RUNNER) private readonly runner: TranscriptionRunner,
   ) {}
 
@@ -44,7 +46,7 @@ export class ProcessTranscriptionHandler implements ICommandHandler<
     const { meetingFileId } = command;
     const file = await this.prisma.meetingFile.findUnique({
       where: { id: meetingFileId },
-      select: { storedName: true },
+      select: { storedName: true, meetingId: true },
     });
 
     // The file (and its cascaded row) may be gone while the job waited.
@@ -66,6 +68,7 @@ export class ProcessTranscriptionHandler implements ICommandHandler<
         error: null,
         finishedAt: new Date(),
       });
+      this.publishCompleted(meetingFileId, file.meetingId);
     } catch (error) {
       // Left as PROCESSING: the next boot re-queues it.
       if (error instanceof TranscriptionInterruptedError) return;
@@ -73,6 +76,17 @@ export class ProcessTranscriptionHandler implements ICommandHandler<
         error: this.toSafeMessage(error),
         finishedAt: new Date(),
       });
+    }
+  }
+
+  /** Fire-and-forget: a failing subscriber must not fail the transcription. */
+  private publishCompleted(meetingFileId: string, meetingId: string): void {
+    try {
+      this.eventBus.publish(
+        new TranscriptionCompletedEvent(meetingFileId, meetingId),
+      );
+    } catch (error) {
+      this.logger.error(`Could not publish completion: ${String(error)}`);
     }
   }
 
