@@ -1,7 +1,8 @@
 @import 'tailwindcss';
 @import '@heroui/styles';
+@import './design-tokens.css';
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-manrope);
   --font-mono: var(--font-geist-mono);
 }

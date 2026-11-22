@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomeDashboard } from './home-dashboard';
 import { ApiError } from '@/lib/api';
@@ -40,41 +41,46 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe('HomeDashboard', () => {
-  it('shows the name in the greeting and the header', async () => {
-    apiMock.getProfile.mockResolvedValue({
-      name: 'Иван Петров',
-      email: 'ivan@example.com',
-      hasAvatar: false,
-    });
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function makeMeeting(id: string, title: string, offsetDays: number) {
+  return {
+    id,
+    title,
+    date: new Date(Date.now() + offsetDays * DAY_MS).toISOString(),
+    participants: ['a@example.com'],
+  };
+}
+
+function mockProfile(name: string | null = 'Иван Петров') {
+  apiMock.getProfile.mockResolvedValue({
+    name,
+    email: 'ivan@example.com',
+    hasAvatar: false,
+  });
+}
+
+describe('HomeDashboard header', () => {
+  it('shows the name in the header', async () => {
+    mockProfile();
 
     render(<HomeDashboard />);
 
-    expect(
-      await screen.findByRole('heading', { name: /Здравствуйте, Иван Петров/ }),
-    ).toBeTruthy();
-    const profileLink = screen.getByRole('link', { name: /Иван Петров/ });
+    const profileLink = await screen.findByRole('link', {
+      name: /Иван Петров/,
+    });
     expect(profileLink.getAttribute('href')).toBe('/profile');
   });
 
   it('falls back to the email when the name is empty', async () => {
-    apiMock.getProfile.mockResolvedValue({
-      name: null,
-      email: 'ivan@example.com',
-      hasAvatar: false,
-    });
+    mockProfile(null);
 
     render(<HomeDashboard />);
 
     expect(
-      await screen.findByRole('heading', {
-        name: /Здравствуйте, ivan@example.com/,
-      }),
-    ).toBeTruthy();
-    expect(
-      screen
-        .getByRole('link', { name: /ivan@example.com/ })
-        .getAttribute('href'),
+      (
+        await screen.findByRole('link', { name: /ivan@example.com/ })
+      ).getAttribute('href'),
     ).toBe('/profile');
   });
 
@@ -95,9 +101,7 @@ describe('HomeDashboard', () => {
     render(<HomeDashboard />);
 
     expect(
-      await screen.findByRole('heading', {
-        name: /Здравствуйте, ivan@example.com/,
-      }),
+      await screen.findByRole('link', { name: 'Профиль: ivan@example.com' }),
     ).toBeTruthy();
     expect(screen.queryByText('Не удалось загрузить встречи')).toBeNull();
   });
@@ -109,10 +113,76 @@ describe('HomeDashboard', () => {
 
     expect(
       (
-        await screen.findByRole('link', {
-          name: 'Профиль: ivan@example.com',
-        })
+        await screen.findByRole('link', { name: 'Профиль: ivan@example.com' })
       ).getAttribute('href'),
     ).toBe('/profile');
+  });
+});
+
+describe('HomeDashboard meetings list', () => {
+  beforeEach(() => mockProfile());
+
+  it('shows the empty state', async () => {
+    render(<HomeDashboard />);
+
+    expect(
+      await screen.findByText(/Встреч пока нет. Создайте первую встречу./),
+    ).toBeTruthy();
+    expect(screen.getByText('Показано 0 из 0')).toBeTruthy();
+  });
+
+  it('lists meetings newest first with their state', async () => {
+    apiMock.listMeetings.mockResolvedValue([
+      makeMeeting('1', 'Старый синк', -7),
+      makeMeeting('2', 'Будущее ретро', 7),
+    ]);
+
+    render(<HomeDashboard />);
+
+    expect(await screen.findByText(/2 встречи · предстоящих: 1/)).toBeTruthy();
+    const links = screen.getAllByRole('link', { name: /синк|ретро/ });
+    // Table rows and mobile cards are both in the DOM; CSS shows one of them.
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/meetings/2',
+      '/meetings/1',
+      '/meetings/2',
+      '/meetings/1',
+    ]);
+    expect(screen.getAllByText('Прошла')).toHaveLength(2);
+    expect(screen.getAllByText('Запланирована')).toHaveLength(2);
+    expect(screen.getByText('Показано 2 из 2')).toBeTruthy();
+  });
+
+  it('filters by tab and by title search', async () => {
+    const user = userEvent.setup();
+    apiMock.listMeetings.mockResolvedValue([
+      makeMeeting('1', 'Старый синк', -7),
+      makeMeeting('2', 'Будущее ретро', 7),
+    ]);
+
+    render(<HomeDashboard />);
+    await screen.findByText(/2 встречи/);
+
+    await user.click(screen.getByRole('tab', { name: /Предстоящие/ }));
+    expect(screen.queryAllByRole('link', { name: /Старый синк/ })).toHaveLength(
+      0,
+    );
+    expect(screen.getAllByRole('link', { name: /Будущее ретро/ })).toHaveLength(
+      2,
+    );
+    expect(screen.getByText('Показано 1 из 2')).toBeTruthy();
+
+    await user.click(screen.getByRole('tab', { name: /Все/ }));
+    await user.type(screen.getByLabelText('Поиск по названию'), 'СИНК');
+    expect(
+      screen.queryAllByRole('link', { name: /Будущее ретро/ }),
+    ).toHaveLength(0);
+    expect(screen.getAllByRole('link', { name: /Старый синк/ })).toHaveLength(
+      2,
+    );
+
+    await user.clear(screen.getByLabelText('Поиск по названию'));
+    await user.type(screen.getByLabelText('Поиск по названию'), 'нет такой');
+    expect(await screen.findByText(/Ничего не найдено/)).toBeTruthy();
   });
 });

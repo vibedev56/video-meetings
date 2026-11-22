@@ -1,23 +1,19 @@
 'use client';
 
-import {
-  Alert,
-  Button,
-  Card,
-  Description,
-  FieldError,
-  Form,
-  Input,
-  Label,
-  Spinner,
-  TextField,
-} from '@heroui/react';
+import { Mail } from 'lucide-react';
 import { useState, type SyntheticEvent } from 'react';
+import { AuthError } from '@/components/auth/auth-error';
+import { AuthHeading } from '@/components/auth/auth-heading';
+import { AuthSwitch } from '@/components/auth/auth-switch';
+import { PasswordField } from '@/components/auth/password-field';
+import { Button, TextField } from '@/components/ui';
 import { ApiError, registerUser } from '@/lib/api';
+import { RegisterSuccess } from './register-success';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
 const ACCESS_TOKEN_KEY = 'accessToken';
+const EMAIL_TAKEN_MESSAGE = 'Этот email уже зарегистрирован';
 
 function validateEmail(value: string) {
   return EMAIL_PATTERN.test(value.trim()) ? null : 'Введите корректный email';
@@ -38,6 +34,16 @@ function saveAccessToken(token: string) {
   }
 }
 
+function describeRegisterError(error: unknown) {
+  if (error instanceof ApiError && error.status === 400) {
+    return `Проверьте данные: email должен быть корректным, пароль — не менее ${MIN_PASSWORD_LENGTH} символов.`;
+  }
+  if (error instanceof ApiError) {
+    return 'Не удалось зарегистрироваться. Попробуйте позже.';
+  }
+  return 'Сервер недоступен. Проверьте, что API запущен.';
+}
+
 export function RegisterForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,9 +53,15 @@ export function RegisterForm() {
   // Client-side validation is shown only after the first submit attempt, so
   // a pristine form does not start out with error messages.
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  // Field-level errors from the server, shown on the matching field.
-  // HeroUI clears each one when the user edits that field.
-  const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
+  // Server-side "email taken" error; cleared as soon as the email is edited.
+  const [isEmailTaken, setIsEmailTaken] = useState(false);
+
+  const emailError = isEmailTaken
+    ? EMAIL_TAKEN_MESSAGE
+    : hasAttemptedSubmit
+      ? validateEmail(email)
+      : null;
+  const passwordError = hasAttemptedSubmit ? validatePassword(password) : null;
 
   async function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,7 +70,7 @@ export function RegisterForm() {
       return;
     }
     setGeneralError(null);
-    setServerErrors({});
+    setIsEmailTaken(false);
     setIsSubmitting(true);
 
     try {
@@ -67,15 +79,9 @@ export function RegisterForm() {
       setIsRegistered(true);
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        setServerErrors({ email: 'Этот email уже зарегистрирован' });
-      } else if (error instanceof ApiError && error.status === 400) {
-        setGeneralError(
-          `Проверьте данные: email должен быть корректным, пароль — не менее ${MIN_PASSWORD_LENGTH} символов.`,
-        );
-      } else if (error instanceof ApiError) {
-        setGeneralError('Не удалось зарегистрироваться. Попробуйте позже.');
+        setIsEmailTaken(true);
       } else {
-        setGeneralError('Сервер недоступен. Проверьте, что API запущен.');
+        setGeneralError(describeRegisterError(error));
       }
     } finally {
       setIsSubmitting(false);
@@ -83,136 +89,68 @@ export function RegisterForm() {
   }
 
   if (isRegistered) {
-    return (
-      <Card className="w-full">
-        <Card.Header className="items-center text-center">
-          <div className="mb-2 flex size-14 items-center justify-center rounded-2xl bg-success/15 text-success">
-            <svg
-              aria-hidden
-              viewBox="0 0 24 24"
-              className="size-7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M5 12.5l4.5 4.5L19 7.5" />
-            </svg>
-          </div>
-          <Card.Title className="text-2xl">Аккаунт создан</Card.Title>
-          <Card.Description>
-            Добро пожаловать! Теперь вы можете создавать и проводить
-            видеовстречи.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content>
-          <Alert status="success">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>Регистрация прошла успешно</Alert.Title>
-              <Alert.Description>
-                Токен доступа сохранён в этом браузере.
-              </Alert.Description>
-            </Alert.Content>
-          </Alert>
-        </Card.Content>
-      </Card>
-    );
+    return <RegisterSuccess />;
   }
 
   return (
-    <Card className="w-full shadow-xl shadow-indigo-500/10">
-      <Card.Header className="items-center text-center">
-        <div className="mb-2 flex size-14 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30">
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            className="size-7"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="2.5" y="6.5" width="13" height="11" rx="2.5" />
-            <path d="M15.5 10.5l5-3v9l-5-3" />
-          </svg>
-        </div>
-        <Card.Title className="text-2xl">Создать аккаунт</Card.Title>
-        <Card.Description>
-          Введите email и пароль, чтобы начать работу с видеовстречами
-        </Card.Description>
-      </Card.Header>
+    <div className="flex w-full flex-col gap-6">
+      <AuthHeading
+        title="Создайте аккаунт"
+        description="Пара секунд — и можно загружать записи встреч и получать задачи по ним."
+      />
 
-      <Form
-        onSubmit={handleSubmit}
-        validationErrors={serverErrors}
-        // 'aria' keeps validation messages inline under each field instead of
-        // the browser's native popups, and lets the custom messages be shown.
-        validationBehavior="aria"
-        className="flex flex-col"
-      >
-        <Card.Content className="flex flex-col gap-5">
-          {generalError && (
-            <Alert status="danger">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Description>{generalError}</Alert.Description>
-              </Alert.Content>
-            </Alert>
-          )}
+      <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-6">
+        {generalError && <AuthError message={generalError} />}
 
+        <div className="flex flex-col gap-4">
           <TextField
-            isRequired
+            label="Email"
+            icon={Mail}
+            required
             name="email"
             type="email"
-            value={email}
-            onChange={setEmail}
-            validate={(value) =>
-              hasAttemptedSubmit ? validateEmail(value) : null
-            }
+            placeholder="you@example.com"
             autoComplete="email"
-            isDisabled={isSubmitting}
-          >
-            <Label>Email</Label>
-            <Input placeholder="you@example.com" variant="secondary" />
-            <FieldError />
-          </TextField>
-
-          <TextField
-            isRequired
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setIsEmailTaken(false);
+            }}
+            error={emailError ?? undefined}
+            disabled={isSubmitting}
+          />
+          <PasswordField
+            label="Пароль"
+            required
             name="password"
-            type="password"
-            value={password}
-            onChange={setPassword}
-            validate={(value) =>
-              hasAttemptedSubmit ? validatePassword(value) : null
-            }
+            placeholder="Не менее 8 символов"
+            hint="Минимум 8 символов, буквы и цифры"
             autoComplete="new-password"
-            isDisabled={isSubmitting}
-          >
-            <Label>Пароль</Label>
-            <Input placeholder="Не менее 8 символов" variant="secondary" />
-            <Description>Минимум {MIN_PASSWORD_LENGTH} символов</Description>
-            <FieldError />
-          </TextField>
-        </Card.Content>
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            error={passwordError ?? undefined}
+            disabled={isSubmitting}
+          />
+        </div>
 
-        <Card.Footer className="flex flex-col gap-3">
-          <Button type="submit" fullWidth size="lg" isPending={isSubmitting}>
-            {({ isPending }) => (
-              <>
-                {isPending ? <Spinner color="current" size="sm" /> : null}
-                Зарегистрироваться
-              </>
-            )}
-          </Button>
-          <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
-            Регистрируясь, вы соглашаетесь с условиями использования сервиса.
-          </p>
-        </Card.Footer>
-      </Form>
-    </Card>
+        <Button
+          type="submit"
+          isLoading={isSubmitting}
+          className="h-12 w-full text-[15px]"
+        >
+          Зарегистрироваться
+        </Button>
+      </form>
+
+      <AuthSwitch
+        question="Уже есть аккаунт?"
+        linkLabel="Войти"
+        href="/auth/login"
+      >
+        <p className="text-center text-xs leading-normal font-medium text-ds-muted">
+          Регистрируясь, вы соглашаетесь с условиями использования сервиса.
+        </p>
+      </AuthSwitch>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { Alert, Button, buttonVariants, ProgressBar } from '@heroui/react';
+import { ProgressBar } from '@heroui/react';
+import { CloudUpload } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   useEffect,
@@ -10,6 +11,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
+import { Button, buttonClasses, InlineAlert } from '@/components/ui';
 import { uploadMeetingFile, type MeetingFileResponse } from '@/lib/api';
 import {
   ACCEPTED_FILE_EXTENSIONS,
@@ -151,10 +153,10 @@ export function MeetingFileUpload({
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
         data-drag-over={isDragOver || undefined}
-        className={`flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-6 text-center transition-colors ${
+        className={`flex flex-col items-center justify-center gap-3 rounded-ds-lg border border-dashed px-5 py-7 text-center transition-colors ${
           isDragOver
-            ? 'border-indigo-500 bg-indigo-50 dark:border-indigo-400 dark:bg-indigo-950/40'
-            : 'border-zinc-300 bg-white/60 dark:border-zinc-700 dark:bg-zinc-900/60'
+            ? 'border-ds-accent bg-ds-accent-soft'
+            : 'border-ds-line-strong bg-ds-bg'
         }`}
       >
         <input
@@ -167,7 +169,7 @@ export function MeetingFileUpload({
         />
         {uploadState.status === 'uploading' ? (
           <div className="flex w-full flex-col gap-3">
-            <p className="break-all font-medium text-zinc-950 dark:text-zinc-50">
+            <p className="text-sm font-semibold break-all text-ds-ink">
               {uploadState.fileName}
             </p>
             <ProgressBar
@@ -184,33 +186,37 @@ export function MeetingFileUpload({
                 button goes away at 100%. */}
             {uploadState.progress < 100 ? (
               <>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                <p className="text-[13px] text-ds-muted">
                   Загрузка… {uploadState.progress}%
                 </p>
                 <Button
-                  variant="outline"
-                  className="min-h-11 self-center"
-                  onPress={() => abortRef.current?.abort()}
+                  variant="secondary"
+                  className="self-center"
+                  onClick={() => abortRef.current?.abort()}
                 >
                   Отменить
                 </Button>
               </>
             ) : (
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="text-[13px] text-ds-muted">
                 Файл передан, сервер сохраняет его…
               </p>
             )}
           </div>
         ) : isFull ? (
-          <p className="text-zinc-700 dark:text-zinc-300">
-            {FULL_MEETING_MESSAGE}
-          </p>
+          <p className="text-sm text-ds-ink">{FULL_MEETING_MESSAGE}</p>
         ) : (
           <>
-            <p className="text-zinc-700 dark:text-zinc-300">
-              Перетащите файл сюда или выберите его на устройстве.
+            <span
+              aria-hidden
+              className="flex size-12 items-center justify-center rounded-[14px] bg-ds-accent-soft text-ds-accent"
+            >
+              <CloudUpload className="size-[22px]" />
+            </span>
+            <p className="text-sm leading-[1.4] font-semibold text-ds-ink">
+              Перетащите файл сюда или выберите его на устройстве
             </p>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-xs leading-[1.4] text-ds-muted">
               mp3, wav, m4a, ogg, mp4, webm, mov · до 500 МБ · один файл за раз
             </p>
             {/* A native label opens the file picker in every browser without
@@ -218,7 +224,7 @@ export function MeetingFileUpload({
                 handler. The input stays focusable for the keyboard. */}
             <label
               htmlFor={inputId}
-              className={`${buttonVariants({ variant: 'primary' })} min-h-11 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500 peer-focus-visible:ring-offset-2`}
+              className={`${buttonClasses('primary')} cursor-pointer peer-focus-visible:shadow-ds-ring`}
             >
               Выбрать файл
             </label>
@@ -226,14 +232,7 @@ export function MeetingFileUpload({
         )}
       </div>
 
-      {error && (
-        <Alert status="danger">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Description>{error}</Alert.Description>
-          </Alert.Content>
-        </Alert>
-      )}
+      {error && <InlineAlert>{error}</InlineAlert>}
     </div>
   );
 }

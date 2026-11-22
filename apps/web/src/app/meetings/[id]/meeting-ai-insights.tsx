@@ -1,17 +1,93 @@
-import { Alert, Card, Chip, Spinner } from '@heroui/react';
-import { AiProcessingStatus, type MeetingDetailResponse } from '@/lib/api';
+'use client';
+
 import {
-  getAiStatusColor,
-  getAiStatusLabel,
-  isAiSkipped,
-} from '@/lib/ai-status';
+  CircleDashed,
+  Loader,
+  Sparkles,
+  TriangleAlert,
+  type LucideIcon,
+} from 'lucide-react';
+import { useId, useState, type ReactNode } from 'react';
+import {
+  Badge,
+  InlineAlert,
+  Tab,
+  TaskItem,
+  type BadgeTone,
+} from '@/components/ui';
+import {
+  AiProcessingStatus,
+  TaskStatus,
+  type MeetingDetailResponse,
+} from '@/lib/api';
+import { getAiStatusLabel, isAiSkipped } from '@/lib/ai-status';
 
-const SECTION_TITLE = 'text-xl font-semibold text-zinc-950 dark:text-zinc-50';
-const EMPTY_TEXT = 'text-zinc-600 dark:text-zinc-400';
-const BODY_TEXT = 'text-zinc-800 dark:text-zinc-200';
+enum InsightTab {
+  SUMMARY = 'SUMMARY',
+  TASKS = 'TASKS',
+  DECISIONS = 'DECISIONS',
+}
 
-function emptyText(isDone: boolean, fallback: string): string {
-  return isDone ? 'ИИ ничего не нашёл.' : fallback;
+const TABS: Array<{ id: InsightTab; label: string }> = [
+  { id: InsightTab.SUMMARY, label: 'Summary' },
+  { id: InsightTab.TASKS, label: 'Action Items' },
+  { id: InsightTab.DECISIONS, label: 'Decisions' },
+];
+
+const TAB_CLASSES = 'flex-1 justify-center text-xs md:flex-none md:text-[13px]';
+
+function statusBadge(
+  status: AiProcessingStatus,
+  aiError: string | null,
+): { tone: BadgeTone; icon: LucideIcon } {
+  if (isAiSkipped(status, aiError)) {
+    return { tone: 'neutral', icon: CircleDashed };
+  }
+  switch (status) {
+    case AiProcessingStatus.DONE:
+      return { tone: 'success', icon: Sparkles };
+    case AiProcessingStatus.FAILED:
+      return { tone: 'danger', icon: TriangleAlert };
+    case AiProcessingStatus.IN_PROGRESS:
+      return { tone: 'accent', icon: Loader };
+    default:
+      return { tone: 'warning', icon: Loader };
+  }
+}
+
+function EmptyState({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-ds-lg bg-ds-bg p-6 text-center md:min-h-[300px]">
+      <span
+        aria-hidden
+        className="flex size-14 items-center justify-center rounded-ds-lg border border-ds-line bg-ds-surface text-ds-accent"
+      >
+        <Sparkles className="size-6" />
+      </span>
+      <p className="text-[17px] font-bold text-ds-ink">{title}</p>
+      <p className="max-w-[400px] text-sm leading-normal text-ds-muted">
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function Panel({
+  id,
+  tabId,
+  isActive,
+  children,
+}: {
+  id: string;
+  tabId: string;
+  isActive: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div role="tabpanel" id={id} aria-labelledby={tabId} hidden={!isActive}>
+      {children}
+    </div>
+  );
 }
 
 /** AI status, summary, action items and decisions of a meeting. */
@@ -20,123 +96,138 @@ export function MeetingAiInsights({
 }: {
   meeting: MeetingDetailResponse;
 }) {
-  const isRunning = meeting.aiStatus === AiProcessingStatus.IN_PROGRESS;
+  const baseId = useId();
+  const [activeTab, setActiveTab] = useState(InsightTab.SUMMARY);
   const isDone = meeting.aiStatus === AiProcessingStatus.DONE;
   const isSkipped = isAiSkipped(meeting.aiStatus, meeting.aiError);
+  const badge = statusBadge(meeting.aiStatus, meeting.aiError);
+  const nothingFound = 'ИИ ничего не нашёл.';
 
   return (
-    <section aria-labelledby="meeting-ai-title" className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 id="meeting-ai-title" className={SECTION_TITLE}>
-          ИИ-анализ
-        </h2>
-        <div
-          role="status"
-          aria-live="polite"
-          className="flex items-center gap-2"
-        >
-          {isRunning && <Spinner size="sm" aria-label="Идёт анализ" />}
-          <Chip
-            size="sm"
-            variant="soft"
-            color={getAiStatusColor(meeting.aiStatus, meeting.aiError)}
+    <section
+      aria-labelledby="meeting-ai-title"
+      className="flex min-w-0 flex-1 flex-col gap-4 rounded-ds-lg border border-ds-line bg-ds-surface p-5 md:gap-5 md:rounded-ds-xl md:p-6"
+    >
+      <div className="flex flex-col gap-3.5 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h2
+            id="meeting-ai-title"
+            className="text-lg font-bold text-ds-ink md:text-xl"
           >
-            {getAiStatusLabel(meeting.aiStatus, meeting.aiError)}
-          </Chip>
+            ИИ-анализ
+          </h2>
+          <div role="status" aria-live="polite">
+            <Badge tone={badge.tone} icon={badge.icon}>
+              {getAiStatusLabel(meeting.aiStatus, meeting.aiError)}
+            </Badge>
+          </div>
+        </div>
+        <div
+          role="tablist"
+          aria-label="Разделы ИИ-анализа"
+          className="flex gap-0.5 rounded-[10px] bg-ds-sunken p-[3px]"
+        >
+          {TABS.map((tab) => (
+            <Tab
+              key={tab.id}
+              id={`${baseId}-tab-${tab.id}`}
+              aria-controls={`${baseId}-panel-${tab.id}`}
+              className={TAB_CLASSES}
+              isActive={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </Tab>
+          ))}
         </div>
       </div>
 
       {meeting.aiStatus === AiProcessingStatus.FAILED && (
-        <Alert status="danger">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>Не удалось выполнить ИИ-анализ</Alert.Title>
-            {meeting.aiError && (
-              <Alert.Description>{meeting.aiError}</Alert.Description>
-            )}
-          </Alert.Content>
-        </Alert>
+        <InlineAlert title="Не удалось выполнить ИИ-анализ">
+          {meeting.aiError}
+        </InlineAlert>
       )}
 
       {isSkipped && (
-        <Alert status="warning">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>ИИ-анализ отключён</Alert.Title>
-            <Alert.Description>
-              Добавьте ANTHROPIC_API_KEY в apps/api/.env, чтобы получать
-              выжимку, задачи и решения автоматически.
-            </Alert.Description>
-          </Alert.Content>
-        </Alert>
+        <InlineAlert tone="warning" title="ИИ-анализ отключён">
+          Добавьте ANTHROPIC_API_KEY в apps/api/.env, чтобы получать выжимку,
+          задачи и решения автоматически.
+        </InlineAlert>
       )}
 
-      <Card>
-        <Card.Header>
-          <Card.Title>Summary</Card.Title>
-        </Card.Header>
-        <Card.Content>
-          {meeting.summary ? (
-            <p className={`whitespace-pre-line break-words ${BODY_TEXT}`}>
-              {meeting.summary}
-            </p>
-          ) : (
-            <p className={EMPTY_TEXT}>
-              {emptyText(isDone, 'Выжимки пока нет.')}
-            </p>
-          )}
-        </Card.Content>
-      </Card>
+      <Panel
+        id={`${baseId}-panel-${InsightTab.SUMMARY}`}
+        tabId={`${baseId}-tab-${InsightTab.SUMMARY}`}
+        isActive={activeTab === InsightTab.SUMMARY}
+      >
+        {meeting.summary ? (
+          <p className="rounded-ds-lg bg-ds-bg p-5 text-sm leading-relaxed break-words whitespace-pre-line text-ds-ink">
+            {meeting.summary}
+          </p>
+        ) : (
+          <EmptyState
+            title="Выжимки пока нет"
+            text={
+              isDone
+                ? nothingFound
+                : 'Загрузите запись встречи — после расшифровки здесь появятся краткая выжимка, задачи и решения.'
+            }
+          />
+        )}
+      </Panel>
 
-      <Card>
-        <Card.Header>
-          <Card.Title>Action Items</Card.Title>
-        </Card.Header>
-        <Card.Content>
-          {meeting.tasks.length > 0 ? (
-            <ul className="flex flex-col gap-3">
-              {meeting.tasks.map((task) => (
-                <li
-                  key={task.id}
-                  className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
-                >
-                  <span className={`break-words ${BODY_TEXT}`}>
-                    {task.title}
-                  </span>
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {task.assignee
+      <Panel
+        id={`${baseId}-panel-${InsightTab.TASKS}`}
+        tabId={`${baseId}-tab-${InsightTab.TASKS}`}
+        isActive={activeTab === InsightTab.TASKS}
+      >
+        {meeting.tasks.length > 0 ? (
+          <ul className="flex flex-col gap-2.5">
+            {meeting.tasks.map((task) => (
+              <li key={task.id}>
+                <TaskItem
+                  title={task.title}
+                  isDone={task.status === TaskStatus.DONE}
+                  meta={
+                    task.assignee
                       ? `Ответственный: ${task.assignee}`
-                      : 'Ответственный не назначен'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className={EMPTY_TEXT}>{emptyText(isDone, 'Задач пока нет.')}</p>
-          )}
-        </Card.Content>
-      </Card>
+                      : 'Ответственный не назначен'
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState
+            title="Задач пока нет"
+            text={isDone ? nothingFound : 'Задачи появятся после ИИ-анализа.'}
+          />
+        )}
+      </Panel>
 
-      <Card>
-        <Card.Header>
-          <Card.Title>Decisions</Card.Title>
-        </Card.Header>
-        <Card.Content>
-          {meeting.decisions.length > 0 ? (
-            <ul className={`flex list-disc flex-col gap-2 pl-5 ${BODY_TEXT}`}>
-              {meeting.decisions.map((decision, index) => (
-                <li key={`${index}-${decision}`} className="break-words">
-                  {decision}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className={EMPTY_TEXT}>
-              {emptyText(isDone, 'Решений пока нет.')}
-            </p>
-          )}
-        </Card.Content>
-      </Card>
+      <Panel
+        id={`${baseId}-panel-${InsightTab.DECISIONS}`}
+        tabId={`${baseId}-tab-${InsightTab.DECISIONS}`}
+        isActive={activeTab === InsightTab.DECISIONS}
+      >
+        {meeting.decisions.length > 0 ? (
+          <ul className="flex flex-col gap-2.5">
+            {meeting.decisions.map((decision, index) => (
+              <li
+                key={`${index}-${decision}`}
+                className="rounded-ds-md bg-ds-bg px-4 py-3.5 text-sm font-semibold break-words text-ds-ink"
+              >
+                {decision}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState
+            title="Решений пока нет"
+            text={isDone ? nothingFound : 'Решения появятся после ИИ-анализа.'}
+          />
+        )}
+      </Panel>
     </section>
   );
 }

@@ -10,8 +10,10 @@ import {
   Modal,
   TextField,
 } from '@heroui/react';
+import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type SyntheticEvent } from 'react';
+import { Button as PrimaryButton } from '@/components/ui';
 import { ApiError, createMeeting } from '@/lib/api';
 import { getAccessToken, redirectToLoginIfUnauthorized } from '@/lib/session';
 
@@ -31,7 +33,7 @@ function validateParticipants(value: string) {
     : 'Введите корректные email через запятую';
 }
 
-export function CreateMeetingDialog() {
+export function CreateMeetingDialog({ className }: { className?: string }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -86,13 +88,13 @@ export function CreateMeetingDialog() {
 
   return (
     <>
-      <Button
-        size="lg"
-        className="min-h-12 w-full sm:flex-1"
-        onPress={() => setIsOpen(true)}
+      <PrimaryButton
+        onClick={() => setIsOpen(true)}
+        className={`h-12 gap-2 px-[22px] text-[15px] ${className ?? ''}`}
       >
+        <Plus aria-hidden className="size-[18px]" />
         Создать встречу
-      </Button>
+      </PrimaryButton>
 
       <Modal isOpen={isOpen} onOpenChange={handleOpenChange}>
         <Modal.Backdrop>

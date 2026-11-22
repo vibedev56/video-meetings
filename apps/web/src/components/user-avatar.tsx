@@ -5,7 +5,7 @@ import { getInitials } from '@/lib/profile';
 import { useAvatarUrl } from '@/lib/use-avatar';
 
 const SIZE_CLASSES = {
-  sm: 'size-9 text-sm',
+  sm: 'size-7 text-xs',
   lg: 'size-16 text-xl',
 } as const;
 
@@ -29,7 +29,7 @@ export function UserAvatar({
   return (
     <div
       aria-hidden
-      className={`${classes} flex items-center justify-center bg-indigo-600 font-semibold text-white`}
+      className={`${classes} flex items-center justify-center bg-ds-accent-soft font-bold text-ds-accent`}
     >
       {getInitials(profile)}
     </div>

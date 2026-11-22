@@ -45,3 +45,67 @@ export function formatDateTime(isoDate: string): string {
   }
   return dateTimeFormatter.format(date);
 }
+
+const dayFormatter = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
+
+const timeFormatter = new Intl.DateTimeFormat('ru-RU', {
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+const INVALID_DATE_LABEL = 'Дата неизвестна';
+
+/** `13 ноября 2026 г.` for an ISO 8601 date-time string. */
+export function formatMeetingDay(isoDate: string): string {
+  const date = new Date(isoDate);
+  return Number.isNaN(date.getTime())
+    ? INVALID_DATE_LABEL
+    : dayFormatter.format(date);
+}
+
+/** `15:12` for an ISO 8601 date-time string, or an empty string if invalid. */
+export function formatMeetingTime(isoDate: string): string {
+  const date = new Date(isoDate);
+  return Number.isNaN(date.getTime()) ? '' : timeFormatter.format(date);
+}
+
+/** `13 ноября 2026 в 15:12`: the compact date line of a meeting card. */
+export function formatMeetingDateLine(isoDate: string): string {
+  const time = formatMeetingTime(isoDate);
+  if (!time) {
+    return INVALID_DATE_LABEL;
+  }
+  return `${formatMeetingDay(isoDate).replace(/\s*г\.$/, '')} в ${time}`;
+}
+
+const MEETINGS_PLURAL_RULES = new Intl.PluralRules('ru-RU');
+
+/** `1 встреча`, `2 встречи`, `5 встреч`. */
+export function formatMeetingsCount(count: number): string {
+  const category = MEETINGS_PLURAL_RULES.select(count);
+  const noun =
+    category === 'one' ? 'встреча' : category === 'few' ? 'встречи' : 'встреч';
+  return `${count} ${noun}`;
+}
+
+/** Day of the month and a three-letter month (`13`, `НОЯ`) for the date badge. */
+export function formatDateBadge(isoDate: string): {
+  day: string;
+  month: string;
+} {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) {
+    return { day: '—', month: '' };
+  }
+  const month = new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(
+    date,
+  );
+  return {
+    day: String(date.getDate()),
+    month: month.slice(0, 3).toUpperCase(),
+  };
+}

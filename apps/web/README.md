@@ -46,7 +46,7 @@ pnpm test
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Manrope](https://fonts.google.com/specimen/Manrope) (the design system font) and Geist Mono. Design tokens are in `src/app/design-tokens.css`, shared components in `src/components/ui/`, and the `/design-system` page shows all of them.
 
 ## Learn More
 

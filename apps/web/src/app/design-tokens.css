@@ -1,0 +1,139 @@
+/*
+ * Design system tokens, ported from design/untitled.pen (frame "Design System").
+ * Everything is namespaced with `ds` so it never collides with HeroUI tokens.
+ * Spacing needs no tokens: space-1..12 of the design equal Tailwind's 1..12 scale.
+ */
+
+:root {
+  /* Base */
+  --ds-bg: #f6f6f3;
+  --ds-surface: #ffffff;
+  --ds-sunken: #ecebe6;
+  --ds-line: #e7e6e1;
+  --ds-line-strong: #d4d2cb;
+
+  /* Text */
+  --ds-ink: #14151a;
+  --ds-muted: #6b6e78;
+  --ds-muted-on-dark: #a9aab3;
+  --ds-on-accent: #ffffff;
+
+  /* Accent and statuses */
+  --ds-accent: #4b3bff;
+  --ds-accent-hover: #3a2be0;
+  --ds-accent-pressed: #2b1fb5;
+  --ds-accent-soft: #eeecff;
+  --ds-danger: #e5484d;
+  --ds-success: #1c7c43;
+  --ds-success-bg: #e6f6ec;
+  --ds-warning: #9a5b00;
+  --ds-warning-bg: #fff3dd;
+
+  /* Component states used in the design without a named variable */
+  --ds-line-hover: #b9b7b0;
+  --ds-secondary-pressed: #e8e7e1;
+  --ds-ghost-pressed: #dfded7;
+  --ds-check-border: #c9c7c0;
+  --ds-accent-disabled: #d8d6ee;
+  --ds-accent-disabled-text: #9c99bc;
+  --ds-disabled-bg: #f3f2ee;
+  --ds-disabled-text: #b2b4bc;
+  --ds-disabled-icon: #c9cad0;
+  --ds-disabled-label: #b4b5bc;
+  --ds-danger-hover: #d13a40;
+  --ds-danger-pressed: #b22c32;
+  --ds-danger-disabled: #f5d5d6;
+  --ds-danger-disabled-text: #c9a0a2;
+  --ds-danger-soft: #fff5f5;
+  --ds-focus-ring: #4b3bff55;
+  --ds-danger-focus-ring: #e5484d55;
+}
+
+/* Design frames: 1024 = lg, 1440 = desktop, 1920 = wide. Named (not arbitrary
+   min-[...]) so Tailwind sorts them after lg and the widths override correctly. */
+@theme {
+  --breakpoint-desktop: 90rem;
+  --breakpoint-wide: 120rem;
+}
+
+@theme inline {
+  --color-ds-bg: var(--ds-bg);
+  --color-ds-surface: var(--ds-surface);
+  --color-ds-sunken: var(--ds-sunken);
+  --color-ds-line: var(--ds-line);
+  --color-ds-line-strong: var(--ds-line-strong);
+  --color-ds-ink: var(--ds-ink);
+  --color-ds-muted: var(--ds-muted);
+  --color-ds-muted-on-dark: var(--ds-muted-on-dark);
+  --color-ds-on-accent: var(--ds-on-accent);
+  --color-ds-accent: var(--ds-accent);
+  --color-ds-accent-hover: var(--ds-accent-hover);
+  --color-ds-accent-pressed: var(--ds-accent-pressed);
+  --color-ds-accent-soft: var(--ds-accent-soft);
+  --color-ds-danger: var(--ds-danger);
+  --color-ds-success: var(--ds-success);
+  --color-ds-success-bg: var(--ds-success-bg);
+  --color-ds-warning: var(--ds-warning);
+  --color-ds-warning-bg: var(--ds-warning-bg);
+  --color-ds-line-hover: var(--ds-line-hover);
+  --color-ds-secondary-pressed: var(--ds-secondary-pressed);
+  --color-ds-ghost-pressed: var(--ds-ghost-pressed);
+  --color-ds-check-border: var(--ds-check-border);
+  --color-ds-accent-disabled: var(--ds-accent-disabled);
+  --color-ds-accent-disabled-text: var(--ds-accent-disabled-text);
+  --color-ds-disabled-bg: var(--ds-disabled-bg);
+  --color-ds-disabled-text: var(--ds-disabled-text);
+  --color-ds-disabled-icon: var(--ds-disabled-icon);
+  --color-ds-disabled-label: var(--ds-disabled-label);
+  --color-ds-danger-hover: var(--ds-danger-hover);
+  --color-ds-danger-pressed: var(--ds-danger-pressed);
+  --color-ds-danger-disabled: var(--ds-danger-disabled);
+  --color-ds-danger-disabled-text: var(--ds-danger-disabled-text);
+  --color-ds-danger-soft: var(--ds-danger-soft);
+
+  --radius-ds-sm: 8px;
+  --radius-ds-md: 12px;
+  --radius-ds-lg: 16px;
+  --radius-ds-xl: 20px;
+  --radius-ds-pill: 9999px;
+
+  --shadow-ds-ring: 0 0 0 3px var(--ds-focus-ring);
+  --shadow-ds-ring-danger: 0 0 0 3px var(--ds-danger-focus-ring);
+  --shadow-ds-tab: 0 1px 3px #00000014;
+}
+
+/* Typography scale (font family comes from --font-sans = Manrope) */
+@utility text-ds-display {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+}
+@utility text-ds-heading {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+@utility text-ds-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+@utility text-ds-body {
+  font-size: 14px;
+  font-weight: 500;
+}
+@utility text-ds-caption {
+  font-size: 13px;
+  font-weight: 500;
+}
+@utility text-ds-overline {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+@utility text-ds-stat {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+}

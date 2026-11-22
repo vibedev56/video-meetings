@@ -1,14 +1,23 @@
 'use client';
 
-import { Alert, Button, Card, Spinner } from '@heroui/react';
+import { Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { getMeeting, hasStatus, type MeetingDetailResponse } from '@/lib/api';
-import { formatDateTime } from '@/lib/format';
+import { AppShell } from '@/components/app-shell';
+import { Button, InlineAlert } from '@/components/ui';
+import {
+  getMeeting,
+  hasStatus,
+  type MeetingDetailResponse,
+  type MeetingFileResponse,
+} from '@/lib/api';
+import { buildMeetingPipeline } from '@/lib/meeting-pipeline';
 import { getAccessToken, redirectToLoginIfUnauthorized } from '@/lib/session';
 import { MeetingAiInsights } from './meeting-ai-insights';
+import { MeetingBreadcrumbs } from './meeting-breadcrumbs';
 import { MeetingFiles } from './meeting-files';
+import { MeetingHero } from './meeting-hero';
 import { useAiStatusPolling } from './use-ai-status-polling';
 
 type LoadState =
@@ -24,6 +33,8 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
   // Sticky: once transcription ran on this page, a PENDING AI status is polled.
   const [hasTranscriptionActivity, setHasTranscriptionActivity] =
     useState(false);
+  // The files feed the pipeline above them; `null` until they are loaded.
+  const [files, setFiles] = useState<MeetingFileResponse[] | null>(null);
   const handleTranscriptionActive = useCallback((isActive: boolean) => {
     if (isActive) setHasTranscriptionActivity(true);
   }, []);
@@ -70,91 +81,79 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
     };
   }, [router, meetingId, reloadKey]);
 
+  const meeting = state.status === 'ready' ? state.meeting : null;
+  const showFiles = state.status === 'loading' || state.status === 'ready';
+
   return (
-    <div className="flex min-h-screen flex-col bg-linear-to-br from-indigo-50 via-white to-violet-100 dark:from-zinc-950 dark:via-zinc-950 dark:to-indigo-950">
-      <header className="sticky top-0 z-10 border-b border-black/5 bg-white/70 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70">
-        <div className="mx-auto flex w-full max-w-3xl items-center gap-4 px-4 py-3">
+    <AppShell width="wide" activeNav="meetings">
+      <MeetingBreadcrumbs title={meeting?.title} />
+
+      {state.status === 'loading' && (
+        <div
+          role="status"
+          className="flex flex-1 items-center justify-center py-24"
+        >
+          <Spinner size="lg" aria-label="Загрузка" />
+        </div>
+      )}
+
+      {state.status === 'not-found' && (
+        <section className="flex flex-col gap-4 rounded-ds-lg border border-ds-line bg-ds-surface p-6 md:rounded-ds-xl">
+          <h1 className="text-2xl font-bold tracking-[-0.6px] text-ds-ink">
+            Встреча не найдена
+          </h1>
+          <p className="text-sm text-ds-muted">
+            Возможно, встреча удалена или открыта по неверной ссылке.
+          </p>
           <Link
             href="/"
-            className="inline-flex min-h-11 items-center text-lg font-semibold tracking-tight text-zinc-950 underline-offset-4 hover:underline dark:text-zinc-50"
+            className="inline-flex min-h-11 items-center self-start rounded-ds-sm font-bold text-ds-accent outline-none hover:underline focus-visible:shadow-ds-ring"
           >
-            Видеовстречи
+            Вернуться к списку встреч
           </Link>
-        </div>
-      </header>
+        </section>
+      )}
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8">
-        {state.status === 'loading' && (
-          <div
-            role="status"
-            className="flex flex-1 items-center justify-center py-24"
-          >
-            <Spinner size="lg" aria-label="Загрузка" />
-          </div>
-        )}
-
-        {state.status === 'not-found' && (
-          <Card>
-            <Card.Content className="flex flex-col gap-4">
-              <h1 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-                Встреча не найдена
-              </h1>
-              <p className="text-zinc-600 dark:text-zinc-400">
-                Возможно, встреча удалена или открыта по неверной ссылке.
-              </p>
-              <Link
-                href="/"
-                className="inline-flex min-h-11 items-center font-medium text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-400"
-              >
-                Вернуться к списку встреч
-              </Link>
-            </Card.Content>
-          </Card>
-        )}
-
-        {state.status === 'error' && (
-          <Alert status="danger">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>Не удалось загрузить встречу</Alert.Title>
-              <Alert.Description>
-                Проверьте подключение и попробуйте снова.
-              </Alert.Description>
-            </Alert.Content>
+      {state.status === 'error' && (
+        <InlineAlert
+          title="Не удалось загрузить встречу"
+          action={
             <Button
-              size="sm"
-              variant="outline"
-              onPress={() => setReloadKey((key) => key + 1)}
-              className="min-h-11"
+              variant="secondary"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="self-start px-4 py-2 text-[13px]"
             >
               Повторить
             </Button>
-          </Alert>
-        )}
+          }
+        >
+          Проверьте подключение и попробуйте снова.
+        </InlineAlert>
+      )}
 
-        {state.status === 'ready' && (
-          <section className="flex flex-col gap-2">
-            <h1 className="break-words text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-              {state.meeting.title}
-            </h1>
-            <p className="text-zinc-600 dark:text-zinc-400">
-              {formatDateTime(state.meeting.date)}
-            </p>
-          </section>
-        )}
+      {meeting && (
+        <MeetingHero
+          meeting={meeting}
+          steps={buildMeetingPipeline(files, {
+            status: meeting.aiStatus,
+            error: meeting.aiError,
+          })}
+        />
+      )}
 
-        {state.status === 'ready' && (
-          <MeetingAiInsights meeting={state.meeting} />
-        )}
-
-        {/* Loads in parallel with the meeting. It stays mounted while the meeting loads and is hidden only if the meeting is missing or failed. */}
-        {(state.status === 'loading' || state.status === 'ready') && (
-          <MeetingFiles
-            meetingId={meetingId}
-            onTranscriptionActiveChange={handleTranscriptionActive}
-          />
-        )}
-      </main>
-    </div>
+      {/* The files load in parallel with the meeting. They stay mounted while the meeting loads and are hidden only if the meeting is missing or failed. */}
+      {showFiles && (
+        <div className="flex flex-col gap-4 md:gap-6 lg:flex-row lg:items-stretch">
+          {meeting && <MeetingAiInsights meeting={meeting} />}
+          <div className="order-first flex flex-col md:order-none lg:w-[360px] desktop:w-[420px] wide:w-[480px]">
+            <MeetingFiles
+              meetingId={meetingId}
+              onTranscriptionActiveChange={handleTranscriptionActive}
+              onFilesChange={setFiles}
+            />
+          </div>
+        </div>
+      )}
+    </AppShell>
   );
 }
