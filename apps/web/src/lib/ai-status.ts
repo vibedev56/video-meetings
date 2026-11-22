@@ -15,9 +15,10 @@ const AI_STATUS_COLORS: Record<AiProcessingStatus, StatusColor> = {
   [AiProcessingStatus.FAILED]: 'danger',
 };
 
-export const AI_NOT_CONFIGURED_LABEL = 'ИИ-анализ не настроен';
+export const AI_UNAVAILABLE_LABEL =
+  'ИИ-анализ недоступен (Ollama не запущен или модель не скачана)';
 
-/** PENDING with a stored reason means the AI stage was skipped (no API key). */
+/** PENDING with a stored reason means the AI stage was skipped (Ollama unavailable). */
 export function isAiSkipped(
   status: AiProcessingStatus,
   aiError: string | null,
@@ -30,7 +31,7 @@ export function getAiStatusLabel(
   aiError: string | null = null,
 ): string {
   return isAiSkipped(status, aiError)
-    ? AI_NOT_CONFIGURED_LABEL
+    ? AI_UNAVAILABLE_LABEL
     : AI_STATUS_LABELS[status];
 }
 

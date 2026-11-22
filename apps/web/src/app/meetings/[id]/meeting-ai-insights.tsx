@@ -150,8 +150,9 @@ export function MeetingAiInsights({
 
       {isSkipped && (
         <InlineAlert tone="warning" title="ИИ-анализ отключён">
-          Добавьте ANTHROPIC_API_KEY в apps/api/.env, чтобы получать выжимку,
-          задачи и решения автоматически.
+          Запустите Ollama и скачайте модель (ollama pull
+          qwen3:4b-instruct-2507-q4_K_M), чтобы получать выжимку, задачи и
+          решения автоматически.
         </InlineAlert>
       )}
 

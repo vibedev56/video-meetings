@@ -7,14 +7,16 @@ export interface AiAgentInput {
   transcript: string;
   summary: string | null;
   decisions: string[];
+  /** 1 on the first attempt; below 1 on a retry: the runner shrinks its chunks by this factor. */
+  chunkScale?: number;
 }
 
 export interface AiAgentResult {
-  /** False when the agent finished without storing a summary (an invalid answer). */
+  /** False when the model's answer was invalid or nothing was stored. */
   meetingUpdated: boolean;
 }
 
-/** Runs one agent pass over a meeting. Tests replace it with a fake. */
+/** Runs one analysis pass over a meeting (the local model). Tests replace it with a fake. */
 export interface AiAgentRunner {
   run(input: AiAgentInput): Promise<AiAgentResult>;
 }

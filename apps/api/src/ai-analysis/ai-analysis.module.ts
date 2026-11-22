@@ -5,7 +5,9 @@ import { MeetingsService } from '../meetings/meetings.service.js';
 import { TasksModule } from '../tasks/tasks.module.js';
 import { AI_AGENT_RUNNER } from './ai-agent.runner.js';
 import { AiAnalysisService } from './ai-analysis.service.js';
-import { ClaudeAgentRunner } from './claude-agent.runner.js';
+import { AiResultApplier } from './ai-result.applier.js';
+import { OllamaClient } from './ollama.client.js';
+import { OllamaRunner } from './ollama.runner.js';
 import { TranscriptionCompletedHandler } from './transcription-completed.handler.js';
 
 @Module({
@@ -13,7 +15,9 @@ import { TranscriptionCompletedHandler } from './transcription-completed.handler
   providers: [
     AiAnalysisService,
     TranscriptionCompletedHandler,
-    { provide: AI_AGENT_RUNNER, useClass: ClaudeAgentRunner },
+    OllamaClient,
+    AiResultApplier,
+    { provide: AI_AGENT_RUNNER, useClass: OllamaRunner },
   ],
 })
 export class AiAnalysisModule implements OnApplicationBootstrap {

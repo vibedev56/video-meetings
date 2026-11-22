@@ -62,7 +62,8 @@ export class MeetingsService {
       where: { id: meetingId },
       data: {
         aiStatus: status,
-        aiError: status === AiProcessingStatus.FAILED ? error : null,
+        // DONE may carry a warning note (e.g. the transcript tail was not analyzed).
+        aiError: finished ? error : null,
         aiProcessedAt: finished ? new Date() : null,
       },
     });

@@ -56,9 +56,11 @@ describe('MeetingAiInsights', () => {
         meeting={{ ...base, aiError: 'AI processing is not configured' }}
       />,
     );
-    expect(screen.getAllByText('ИИ-анализ не настроен').length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      screen.getAllByText(
+        'ИИ-анализ недоступен (Ollama не запущен или модель не скачана)',
+      ).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText('Не удалось выполнить ИИ-анализ')).toBeNull();
   });
 

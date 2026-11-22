@@ -40,7 +40,7 @@ describe('ai status helpers', () => {
       false,
     );
     expect(getAiStatusLabel(AiProcessingStatus.PENDING, 'x')).toBe(
-      'ИИ-анализ не настроен',
+      'ИИ-анализ недоступен (Ollama не запущен или модель не скачана)',
     );
   });
 });

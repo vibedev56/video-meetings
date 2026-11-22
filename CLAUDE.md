@@ -36,7 +36,7 @@ Use `pnpm --filter <app> <script>` to target a single app (`web` or `api`).
 - Workspace packages are declared in `pnpm-workspace.yaml` as `apps/*`.
 - Formatting: Prettier with `singleQuote: true` and `trailingComma: "all"`. `.editorconfig` sets LF line endings, 2-space indentation, UTF-8, and a final newline. Run `pnpm format` before finishing a change.
 - Transcription of uploaded mp3/mp4 files runs a local Whisper (`pip install -U openai-whisper`) and needs `ffmpeg` on `PATH`; `WHISPER_MODEL` defaults to `tiny`. Details in `apps/api/CLAUDE.md`.
-- AI analysis of transcripts uses `@anthropic-ai/claude-agent-sdk`; `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL` go only into `apps/api/.env` (never web, never committed). Details in `apps/api/CLAUDE.md`.
+- AI analysis of transcripts runs a free local model through Ollama (default `qwen3:4b-instruct-2507-q4_K_M`, `ollama pull` once; no API key, no Anthropic SDK). Settings (`OLLAMA_BASE_URL`, `AI_MODEL`, ...) go into `apps/api/.env`. Details in `apps/api/CLAUDE.md`.
 - `.env*` files are git-ignored (except `.env.example`). Never commit secrets or `.env` contents.
 - Generated output (`dist/`, `.next/`, `*.tsbuildinfo`, `next-env.d.ts`) is git-ignored. Do not edit it by hand.
 - Git hooks use **Husky** (v9, root devDependency). `.husky/pre-commit` runs `pnpm lint && pnpm test && pnpm --filter api test:e2e` on every commit. The hook is installed by the root `prepare` script (`git config core.hooksPath .husky/_`). Do not skip it with `--no-verify`; fix the failure instead.

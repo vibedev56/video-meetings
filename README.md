@@ -38,7 +38,12 @@ Uploaded mp3 and mp4 files are transcribed locally with Whisper, so the machine 
 
 ## AI analysis
 
-When a transcript is saved, the API analyses it in the background with the Claude Agent SDK (Haiku) and stores a summary, decisions and action items on the meeting. Set `ANTHROPIC_API_KEY` (optionally `ANTHROPIC_BASE_URL`) in `apps/api/.env` only; never commit it. Without a key the analysis is skipped softly (the meeting stays `PENDING` with a hint "ИИ-анализ не настроен") and everything else works. Details in `apps/api/README.md`.
+When a transcript is saved, the API analyses it in the background with a free local model and stores a summary, decisions and action items on the meeting. The model runs in [Ollama](https://ollama.com) (default `qwen3:4b-instruct-2507-q4_K_M`, about 2.5 GB, works on CPU and uses the GPU when available). No API key and no cloud service are used. Set up once:
+
+1. Install Ollama (`winget install Ollama.Ollama`, or from ollama.com) and make sure it is running (port 11434).
+2. `ollama pull qwen3:4b-instruct-2507-q4_K_M` (for a weak machine: `ollama pull qwen3:1.7b` and `AI_MODEL=qwen3:1.7b` in `apps/api/.env`).
+
+If Ollama is not running or the model is not pulled, the analysis is skipped softly (the meeting stays `PENDING` with a hint) and everything else works. Variables and details in `apps/api/README.md`.
 
 ## Quick start (API)
 

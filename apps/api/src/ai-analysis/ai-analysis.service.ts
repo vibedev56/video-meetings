@@ -1,18 +1,29 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { AiProcessingStatus } from '../meetings/meeting-ai-status.js';
 import { MeetingsService } from '../meetings/meetings.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TranscriptionStatus } from '../transcriptions/transcription-status.js';
 import { AI_AGENT_RUNNER, type AiAgentRunner } from './ai-agent.runner.js';
-import { getAiAnalysisConfig, isAiConfigured } from './ai-analysis.config.js';
 import {
   AI_FAILURE_MESSAGE,
-  AI_NOT_CONFIGURED_MESSAGE,
   AI_RETRY_DELAY_MS,
+  AI_TRANSCRIPT_TRUNCATED_NOTE,
   MAX_AI_ATTEMPTS,
   MAX_TRANSCRIPT_CHARS,
+  RETRY_CHUNK_SCALE,
 } from './ai-analysis.constants.js';
+import { AiRuntimeUnavailableError } from './ai-analysis.errors.js';
+
+interface LoadedTranscript {
+  text: string;
+  /** Characters beyond MAX_TRANSCRIPT_CHARS that were not sent to the model. */
+  droppedChars: number;
+}
+
+interface RunOutcome {
+  succeeded: boolean;
+  droppedChars: number;
+}
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,7 +36,6 @@ export class AiAnalysisService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
     private readonly meetings: MeetingsService,
     @Inject(AI_AGENT_RUNNER) private readonly runner: AiAgentRunner,
   ) {}
@@ -54,20 +64,26 @@ export class AiAnalysisService {
     const ownerId = await this.meetings.getOwnerId(meetingId);
     if (!ownerId) return;
 
-    if (!isAiConfigured(getAiAnalysisConfig(this.config))) {
-      await this.meetings.markAiSkipped(meetingId, AI_NOT_CONFIGURED_MESSAGE);
-      return;
-    }
-
     await this.meetings.markAiStatus(meetingId, AiProcessingStatus.IN_PROGRESS);
     try {
-      const succeeded = await this.runWithRetry(meetingId, ownerId);
+      const { succeeded, droppedChars } = await this.runWithRetry(
+        meetingId,
+        ownerId,
+      );
       await this.meetings.markAiStatus(
         meetingId,
         succeeded ? AiProcessingStatus.DONE : AiProcessingStatus.FAILED,
-        succeeded ? null : AI_FAILURE_MESSAGE,
+        succeeded
+          ? this.truncationNote(meetingId, droppedChars)
+          : AI_FAILURE_MESSAGE,
       );
     } catch (error) {
+      if (error instanceof AiRuntimeUnavailableError) {
+        // The local model is down or not pulled: back to PENDING with a hint.
+        this.logger.warn(`AI skipped for ${meetingId}: ${error.message}`);
+        await this.meetings.markAiSkipped(meetingId, error.message);
+        return;
+      }
       this.logger.error(`AI run failed for ${meetingId}: ${String(error)}`);
       await this.meetings.markAiStatus(
         meetingId,
@@ -77,36 +93,55 @@ export class AiAnalysisService {
     }
   }
 
-  /** Retries on an exception or an invalid answer (no result stored). */
+  /** A DONE run that skipped the transcript tail is not silent: warn in the log and in aiError. */
+  private truncationNote(meetingId: string, droppedChars: number) {
+    if (droppedChars === 0) return null;
+    this.logger.warn(
+      `Transcript of ${meetingId} exceeds ${MAX_TRANSCRIPT_CHARS} chars: ${droppedChars} chars were not analyzed`,
+    );
+    return AI_TRANSCRIPT_TRUNCATED_NOTE;
+  }
+
+  /**
+   * Retries on an exception (timeout, truncated output) or an invalid answer.
+   * A retry is never identical: every attempt shrinks the chunk size. An
+   * unavailable runtime is not retried: it is rethrown to `process`.
+   */
   private async runWithRetry(
     meetingId: string,
     ownerId: string,
-  ): Promise<boolean> {
+  ): Promise<RunOutcome> {
+    let droppedChars = 0;
     for (let attempt = 1; attempt <= MAX_AI_ATTEMPTS; attempt++) {
       try {
         const meeting = await this.meetings.findOwnedForAi(meetingId, ownerId);
         const transcript = await this.loadTranscript(meetingId);
-        if (!meeting || !transcript) return false;
+        if (!meeting || !transcript.text) {
+          return { succeeded: false, droppedChars };
+        }
+        droppedChars = transcript.droppedChars;
 
         const result = await this.runner.run({
           meetingId,
           ownerId,
-          transcript,
+          transcript: transcript.text,
           summary: meeting.summary,
           decisions: meeting.decisions,
+          chunkScale: RETRY_CHUNK_SCALE ** (attempt - 1),
         });
-        if (result.meetingUpdated) return true;
-        this.logger.warn(`Attempt ${attempt}: agent stored no result`);
+        if (result.meetingUpdated) return { succeeded: true, droppedChars };
+        this.logger.warn(`Attempt ${attempt}: model stored no result`);
       } catch (error) {
+        if (error instanceof AiRuntimeUnavailableError) throw error;
         this.logger.warn(`Attempt ${attempt} failed: ${String(error)}`);
       }
       if (attempt < MAX_AI_ATTEMPTS) await delay(AI_RETRY_DELAY_MS * attempt);
     }
-    return false;
+    return { succeeded: false, droppedChars };
   }
 
   /** Transcripts of all completed files of the meeting, oldest first. */
-  private async loadTranscript(meetingId: string): Promise<string> {
+  private async loadTranscript(meetingId: string): Promise<LoadedTranscript> {
     const rows = await this.prisma.transcription.findMany({
       where: {
         status: TranscriptionStatus.COMPLETED,
@@ -115,10 +150,13 @@ export class AiAnalysisService {
       orderBy: { finishedAt: 'asc' },
       select: { text: true, meetingFile: { select: { originalName: true } } },
     });
-    return rows
+    const full = rows
       .filter((row) => row.text?.trim())
       .map((row) => `[${row.meetingFile.originalName}]\n${row.text}`)
-      .join('\n\n')
-      .slice(0, MAX_TRANSCRIPT_CHARS);
+      .join('\n\n');
+    return {
+      text: full.slice(0, MAX_TRANSCRIPT_CHARS),
+      droppedChars: Math.max(0, full.length - MAX_TRANSCRIPT_CHARS),
+    };
   }
 }
